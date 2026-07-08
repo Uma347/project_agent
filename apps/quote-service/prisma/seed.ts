@@ -4,37 +4,40 @@ const prisma = new PrismaClient();
 
 async function main() {
   await prisma.product.upsert({
-    where: { sku: 'TOTTO-BACKPACK-001' },
+    where: { id: 'burger_classic' },
     update: {},
     create: {
-      sku: 'TOTTO-BACKPACK-001',
-      name: 'Mochila Totto Campus',
-      description: 'Producto simulado para flujo de cotizacion.',
-      priceCents: 24900,
+      id: 'burger_classic',
+      sku: 'BURGER-CLASSIC',
+      name: 'Hamburguesa clasica',
+      description: 'Producto simulado interpretado por el AI Agent.',
+      priceCents: 1200,
       active: true,
     },
   });
 
   await prisma.product.upsert({
-    where: { sku: 'TOTTO-LUNCH-002' },
+    where: { id: 'fries_regular' },
     update: {},
     create: {
-      sku: 'TOTTO-LUNCH-002',
-      name: 'Lonchera Totto Eco',
-      description: 'Producto simulado para flujo de cotizacion.',
-      priceCents: 8900,
+      id: 'fries_regular',
+      sku: 'FRIES-REGULAR',
+      name: 'Papas fritas',
+      description: 'Producto simulado interpretado por el AI Agent.',
+      priceCents: 600,
       active: true,
     },
   });
 
   await prisma.product.upsert({
-    where: { sku: 'TOTTO-PENCIL-003' },
+    where: { id: 'soda_regular' },
     update: {},
     create: {
-      sku: 'TOTTO-PENCIL-003',
-      name: 'Cartuchera Totto Neon',
-      description: 'Producto simulado para flujo de cotizacion.',
-      priceCents: 3900,
+      id: 'soda_regular',
+      sku: 'SODA-REGULAR',
+      name: 'Gaseosa regular',
+      description: 'Producto simulado interpretado por el AI Agent.',
+      priceCents: 500,
       active: true,
     },
   });

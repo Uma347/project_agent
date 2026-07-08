@@ -8,6 +8,7 @@ export default () => ({
       .map((server) => server.trim())
       .filter(Boolean),
     queue: process.env.NATS_QUEUE ?? 'quote-service',
+    requestTimeoutMs: Number(process.env.NATS_REQUEST_TIMEOUT_MS ?? 5000),
   },
   quote: {
     expirationMinutes: Number(process.env.QUOTE_EXPIRATION_MINUTES ?? 10),

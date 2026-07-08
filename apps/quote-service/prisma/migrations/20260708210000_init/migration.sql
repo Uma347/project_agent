@@ -6,7 +6,7 @@ CREATE TYPE "QuoteStatus" AS ENUM (
 );
 
 CREATE TYPE "QuoteEventType" AS ENUM (
-  'CREATED',
+  'QUOTE_CREATED',
   'APPROVED',
   'REJECTED',
   'EXECUTED',
@@ -14,7 +14,7 @@ CREATE TYPE "QuoteEventType" AS ENUM (
 );
 
 CREATE TABLE "products" (
-  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+  "id" TEXT NOT NULL,
   "sku" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "description" TEXT,
@@ -27,7 +27,7 @@ CREATE TABLE "products" (
 
 CREATE TABLE "quotes" (
   "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-  "product_id" UUID NOT NULL,
+  "product_id" TEXT NOT NULL,
   "quantity" INTEGER NOT NULL,
   "unit_price_cents" INTEGER NOT NULL,
   "total_cents" INTEGER NOT NULL,
