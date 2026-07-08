@@ -1,0 +1,15 @@
+export default () => ({
+  app: {
+    nodeEnv: process.env.NODE_ENV ?? 'development',
+  },
+  nats: {
+    servers: (process.env.NATS_SERVERS ?? 'nats://localhost:4222')
+      .split(',')
+      .map((server) => server.trim())
+      .filter(Boolean),
+    queue: process.env.NATS_QUEUE ?? 'quote-service',
+  },
+  quote: {
+    expirationMinutes: Number(process.env.QUOTE_EXPIRATION_MINUTES ?? 10),
+  },
+});
