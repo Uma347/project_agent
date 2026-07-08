@@ -53,6 +53,7 @@ Archivos:
 
 - `prisma/schema.prisma`
 - `prisma/migrations/20260708210000_init/migration.sql`
+- `prisma/seed.js`
 - `prisma/seed.ts`
 
 ## Variables de entorno
