@@ -44,7 +44,7 @@ Ver `.env.example`.
 | --- | --- | --- |
 | `NODE_ENV` | Ambiente de ejecucion: `development`, `test`, `production`. | `development` |
 | `PORT` | Puerto HTTP del gateway. | `3000` |
-| `API_GLOBAL_PREFIX` | Prefijo global de la API. | `api/v1` |
+| `API_GLOBAL_PREFIX` | Prefijo global de la API. | `api` |
 | `SWAGGER_TITLE` | Titulo de Swagger. | `Qhantuy API Gateway` |
 | `SWAGGER_DESCRIPTION` | Descripcion de Swagger. | `HTTP REST API Gateway for Qhantuy microservices.` |
 | `SWAGGER_VERSION` | Version documentada de la API. | `1.0.0` |
@@ -62,7 +62,41 @@ npm run start:dev
 Health:
 
 ```bash
-curl http://localhost:3000/api/v1/health
+curl http://localhost:3000/api/health
+```
+
+## Endpoints REST
+
+Crear cotizacion desde una intencion:
+
+```bash
+curl -X POST http://localhost:3000/api/agent/quote \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"quiero comprar dos hamburguesas\"}"
+```
+
+Aprobar cotizacion:
+
+```bash
+curl -X POST http://localhost:3000/api/agent/quote/{quote_id}/approve \
+  -H "Content-Type: application/json" \
+  -d "{\"approvedBy\":\"human-operator-1\"}"
+```
+
+Rechazar cotizacion:
+
+```bash
+curl -X POST http://localhost:3000/api/agent/quote/{quote_id}/reject \
+  -H "Content-Type: application/json" \
+  -d "{\"rejectedBy\":\"human-operator-1\",\"reason\":\"Cliente no confirmo\"}"
+```
+
+Ejecutar compra simulada:
+
+```bash
+curl -X POST http://localhost:3000/api/agent/quote/{quote_id}/execute \
+  -H "Content-Type: application/json" \
+  -d "{\"executedBy\":\"human-operator-1\"}"
 ```
 
 Swagger:

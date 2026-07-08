@@ -20,9 +20,9 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/api/v1/health (GET)', () => {
+  it('/api/health (GET)', () => {
     return request(app.getHttpServer())
-      .get('/api/v1/health')
+      .get('/api/health')
       .expect(200)
       .expect(({ body }) => {
         const response = body as { status: string; service: string };

@@ -2,7 +2,7 @@ export default () => ({
   app: {
     nodeEnv: process.env.NODE_ENV ?? 'development',
     port: Number(process.env.PORT ?? 3000),
-    globalPrefix: process.env.API_GLOBAL_PREFIX ?? 'api/v1',
+    globalPrefix: process.env.API_GLOBAL_PREFIX ?? 'api',
   },
   swagger: {
     title: process.env.SWAGGER_TITLE ?? 'Qhantuy API Gateway',
