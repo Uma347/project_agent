@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: qhantuy
+      POSTGRES_PASSWORD: qhantuy
+      POSTGRES_DB: qhantuy_quotes
+    ports:
+      - "5432:5432"
+
+  nats:
+    image: nats:2.10
+    command: ["-js"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
