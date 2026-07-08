@@ -1,98 +1,104 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# API Gateway
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Servicio NestJS que expone una API HTTP REST y delega la ejecucion de casos
+de uso a microservicios mediante NATS Request/Reply. Este gateway no contiene
+logica de negocio, persistencia ni autenticacion.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Responsabilidades
 
-## Description
+- Exponer endpoints HTTP REST.
+- Validar requests de entrada con pipes globales.
+- Traducir requests HTTP a mensajes NATS Request/Reply.
+- Centralizar configuracion, logging, errores y documentacion Swagger.
+- Exponer un endpoint de salud.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Estructura
 
-## Project setup
-
-```bash
-$ npm install
+```text
+src/
+|-- common/
+|   `-- filters/
+|       `-- all-exceptions.filter.ts
+|-- config/
+|   |-- configuration.ts
+|   `-- env.validation.ts
+|-- health/
+|   |-- health.module.ts
+|   `-- presentation/
+|       `-- http/
+|           `-- health.controller.ts
+|-- infrastructure/
+|   `-- nats/
+|       |-- nats.constants.ts
+|       |-- nats.module.ts
+|       `-- nats-request.client.ts
+|-- app.module.ts
+`-- main.ts
 ```
 
-## Compile and run the project
+## Variables de entorno
+
+Ver `.env.example`.
+
+| Variable | Descripcion | Default |
+| --- | --- | --- |
+| `NODE_ENV` | Ambiente de ejecucion: `development`, `test`, `production`. | `development` |
+| `PORT` | Puerto HTTP del gateway. | `3000` |
+| `API_GLOBAL_PREFIX` | Prefijo global de la API. | `api/v1` |
+| `SWAGGER_TITLE` | Titulo de Swagger. | `Qhantuy API Gateway` |
+| `SWAGGER_DESCRIPTION` | Descripcion de Swagger. | `HTTP REST API Gateway for Qhantuy microservices.` |
+| `SWAGGER_VERSION` | Version documentada de la API. | `1.0.0` |
+| `SWAGGER_PATH` | Ruta de Swagger. | `docs` |
+| `NATS_SERVERS` | Lista separada por comas de servidores NATS. | `nats://localhost:4222` |
+| `NATS_REQUEST_TIMEOUT_MS` | Timeout de requests NATS en milisegundos. | `5000` |
+
+## Ejecucion local
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
+npm run start:dev
 ```
 
-## Run tests
+Health:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+curl http://localhost:3000/api/v1/health
 ```
 
-## Deployment
+Swagger:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+```text
+http://localhost:3000/docs
+```
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Cliente NATS
+
+El cliente reutilizable vive en `src/infrastructure/nats/nats-request.client.ts`.
+Los modulos HTTP futuros deben inyectar `NatsRequestClient` y llamar:
+
+```ts
+await natsRequestClient.request<ResponseDto, RequestDto>('subject.name', payload);
+```
+
+## Docker
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+docker build -t qhantuy-api-gateway .
+docker run --rm -p 3000:3000 --env-file .env qhantuy-api-gateway
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Comandos
 
-## Resources
+```bash
+npm run build
+npm run lint
+npm run test
+npm run test:e2e
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Pendiente
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Autenticacion.
+- Endpoints del agente.
+- Endpoints de cotizaciones.
+- Persistencia.
