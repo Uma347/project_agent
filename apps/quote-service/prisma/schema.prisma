@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum QuoteStatus {
+  PENDING_HUMAN_APPROVAL
+  APPROVED
+  REJECTED
+  EXECUTED
+}
+
+enum QuoteEventType {
+  CREATED
+  APPROVED
+  REJECTED
+  EXECUTED
+  EXECUTION_REPLAYED
+}
+
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  sku         String   @unique
+  name        String
+  description String?
+  priceCents  Int      @map("price_cents")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  quotes Quote[]
+
+  @@map("products")
+}
+
+model Quote {
+  id              String      @id @default(uuid()) @db.Uuid
+  productId       String      @map("product_id") @db.Uuid
+  product         Product     @relation(fields: [productId], references: [id])
+  quantity        Int
+  unitPriceCents  Int         @map("unit_price_cents")
+  totalCents      Int         @map("total_cents")
+  status          QuoteStatus @default(PENDING_HUMAN_APPROVAL)
+  expiresAt       DateTime    @map("expires_at")
+  approvedAt      DateTime?   @map("approved_at")
+  rejectedAt      DateTime?   @map("rejected_at")
+  executedAt      DateTime?   @map("executed_at")
+  executionId     String?     @unique @map("execution_id") @db.Uuid
+  executionResult Json?       @map("execution_result")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  events QuoteEvent[]
+
+  @@index([productId])
+  @@index([status])
+  @@map("quotes")
+}
+
+model QuoteEvent {
+  id        String         @id @default(uuid()) @db.Uuid
+  quoteId   String         @map("quote_id") @db.Uuid
+  quote     Quote          @relation(fields: [quoteId], references: [id])
+  eventType QuoteEventType @map("event_type")
+  metadata  Json
+  timestamp DateTime       @default(now())
+
+  @@index([quoteId])
+  @@map("quote_events")
+}
