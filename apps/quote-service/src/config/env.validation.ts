@@ -31,6 +31,11 @@ class EnvironmentVariables {
   @IsOptional()
   @IsInt()
   @Min(1)
+  NATS_REQUEST_TIMEOUT_MS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
   QUOTE_EXPIRATION_MINUTES?: number;
 }
 

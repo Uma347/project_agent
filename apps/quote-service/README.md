@@ -8,7 +8,7 @@ PostgreSQL usando Prisma.
 
 | Subject | Payload minimo | Descripcion |
 | --- | --- | --- |
-| `agent.quote.create` | `{ "productId": "uuid", "quantity": 1 }` | Crea una cotizacion en `PENDING_HUMAN_APPROVAL`. |
+| `agent.quote.create` | `{ "prompt": "quiero comprar dos hamburguesas" }` | Interpreta la intencion con `ai-agent` y crea una cotizacion en `PENDING_HUMAN_APPROVAL`. |
 | `agent.quote.approve` | `{ "quoteId": "uuid", "approvedBy": "human-id" }` | Aprueba una cotizacion vigente. |
 | `agent.quote.reject` | `{ "quoteId": "uuid", "rejectedBy": "human-id" }` | Rechaza una cotizacion. |
 | `agent.quote.execute` | `{ "quoteId": "uuid" }` | Ejecuta una compra simulada solo si fue aprobada. |
@@ -16,6 +16,7 @@ PostgreSQL usando Prisma.
 ## Reglas implementadas
 
 - Toda cotizacion nueva queda en `PENDING_HUMAN_APPROVAL`.
+- La creacion llama por Request/Reply a `ai.intent.interpret`.
 - La expiracion se calcula con `QUOTE_EXPIRATION_MINUTES`, por defecto 10.
 - Una cotizacion expirada no puede aprobarse ni ejecutarse.
 - La ejecucion solo ocurre si la cotizacion fue aprobada por un humano.
@@ -63,6 +64,7 @@ Ver `.env.example`.
 | `DATABASE_URL` | Conexion PostgreSQL usada por Prisma. |
 | `NATS_SERVERS` | Lista separada por comas de servidores NATS. |
 | `NATS_QUEUE` | Queue group del servicio. |
+| `NATS_REQUEST_TIMEOUT_MS` | Timeout para requests NATS hacia otros servicios. |
 | `QUOTE_EXPIRATION_MINUTES` | Minutos de vigencia de una cotizacion. |
 
 ## Ejecucion local

@@ -2,18 +2,29 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   Prisma,
+  Product,
   Quote,
   QuoteEventType as PrismaQuoteEventType,
   QuoteStatus,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { NatsRequestClient } from '../infrastructure/nats/nats-request.client';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { ApproveQuoteDto } from './application/dto/approve-quote.dto';
 import { CreateQuoteDto } from './application/dto/create-quote.dto';
 import { ExecuteQuoteDto } from './application/dto/execute-quote.dto';
 import { RejectQuoteDto } from './application/dto/reject-quote.dto';
 import { QuoteDomainError } from './domain/quote.errors';
-import { QuoteEventType } from './domain/quote-event-type';
+
+type IntentInterpretationResponse = {
+  productId?: string;
+  quantity?: number;
+  reason?: string;
+  error?: {
+    code: string;
+    message: string;
+  };
+};
 
 @Injectable()
 export class QuotesService {
@@ -21,6 +32,7 @@ export class QuotesService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly natsRequestClient: NatsRequestClient,
     configService: ConfigService,
   ) {
     this.expirationMinutes = configService.getOrThrow<number>(
@@ -29,8 +41,33 @@ export class QuotesService {
   }
 
   async create(payload: CreateQuoteDto) {
+    const interpretation =
+      await this.natsRequestClient.request<IntentInterpretationResponse>(
+        'ai.intent.interpret',
+        {
+          prompt: payload.prompt,
+        },
+      );
+
+    if (interpretation.error) {
+      throw new QuoteDomainError(interpretation.error.message);
+    }
+
+    const interpretedQuantity = interpretation.quantity;
+
+    if (
+      !interpretation.productId ||
+      !Number.isInteger(interpretedQuantity) ||
+      interpretedQuantity === undefined ||
+      interpretedQuantity < 1
+    ) {
+      throw new QuoteDomainError(
+        'AI agent returned an invalid quote interpretation.',
+      );
+    }
+
     const product = await this.prisma.product.findUnique({
-      where: { id: payload.productId },
+      where: { id: interpretation.productId },
     });
 
     if (!product || !product.active) {
@@ -39,14 +76,16 @@ export class QuotesService {
 
     const now = new Date();
     const expiresAt = this.addMinutes(now, this.expirationMinutes);
-    const totalCents = product.priceCents * payload.quantity;
+    const quantity = interpretedQuantity;
+    const unitPriceCents = product.priceCents;
+    const totalCents = unitPriceCents * quantity;
 
     const quote = await this.prisma.$transaction(async (tx) => {
       const createdQuote = await tx.quote.create({
         data: {
           productId: product.id,
-          quantity: payload.quantity,
-          unitPriceCents: product.priceCents,
+          quantity,
+          unitPriceCents,
           totalCents,
           status: QuoteStatus.PENDING_HUMAN_APPROVAL,
           expiresAt,
@@ -54,13 +93,20 @@ export class QuotesService {
         include: { product: true },
       });
 
-      await this.recordEvent(tx, createdQuote.id, QuoteEventType.CREATED, {
-        requestedBy: payload.requestedBy,
-        productId: product.id,
-        quantity: payload.quantity,
-        unitPriceCents: product.priceCents,
-        totalCents,
-      });
+      await this.recordEvent(
+        tx,
+        createdQuote.id,
+        PrismaQuoteEventType.QUOTE_CREATED,
+        {
+          requestedBy: payload.requestedBy,
+          prompt: payload.prompt,
+          interpretationReason: interpretation.reason,
+          productId: product.id,
+          quantity,
+          unitPriceCents,
+          totalCents,
+        },
+      );
 
       return createdQuote;
     });
@@ -94,10 +140,15 @@ export class QuotesService {
         include: { product: true },
       });
 
-      await this.recordEvent(tx, approvedQuote.id, QuoteEventType.APPROVED, {
-        approvedBy: payload.approvedBy,
-        note: payload.note,
-      });
+      await this.recordEvent(
+        tx,
+        approvedQuote.id,
+        PrismaQuoteEventType.APPROVED,
+        {
+          approvedBy: payload.approvedBy,
+          note: payload.note,
+        },
+      );
 
       return approvedQuote;
     });
@@ -126,10 +177,15 @@ export class QuotesService {
         include: { product: true },
       });
 
-      await this.recordEvent(tx, rejectedQuote.id, QuoteEventType.REJECTED, {
-        rejectedBy: payload.rejectedBy,
-        reason: payload.reason,
-      });
+      await this.recordEvent(
+        tx,
+        rejectedQuote.id,
+        PrismaQuoteEventType.REJECTED,
+        {
+          rejectedBy: payload.rejectedBy,
+          reason: payload.reason,
+        },
+      );
 
       return rejectedQuote;
     });
@@ -198,10 +254,15 @@ export class QuotesService {
         include: { product: true },
       });
 
-      await this.recordEvent(tx, executedQuote.id, QuoteEventType.EXECUTED, {
-        executedBy: payload.executedBy,
-        executionResult,
-      });
+      await this.recordEvent(
+        tx,
+        executedQuote.id,
+        PrismaQuoteEventType.EXECUTED,
+        {
+          executedBy: payload.executedBy,
+          executionResult,
+        },
+      );
 
       return executedQuote;
     });
@@ -235,7 +296,7 @@ export class QuotesService {
   private async recordEvent(
     tx: Prisma.TransactionClient,
     quoteId: string,
-    eventType: QuoteEventType,
+    eventType: PrismaQuoteEventType,
     metadata: Prisma.InputJsonValue,
   ) {
     await tx.quoteEvent.create({
@@ -248,7 +309,7 @@ export class QuotesService {
   }
 
   private toResponse(
-    quote: Quote & { product?: { name: string; sku: string } },
+    quote: Quote & { product?: Pick<Product, 'name' | 'sku'> },
   ) {
     return {
       id: quote.id,

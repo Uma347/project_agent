@@ -28,8 +28,7 @@ describe('Quote Service NATS handlers (e2e)', () => {
 
   it('delegates quote creation messages to the application service', () => {
     const payload = {
-      productId: '5bf4eabc-9b9d-474a-b619-99ac88877777',
-      quantity: 1,
+      prompt: 'quiero comprar dos hamburguesas',
     };
     quotesService.create.mockReturnValue({ id: 'quote-id' });
 

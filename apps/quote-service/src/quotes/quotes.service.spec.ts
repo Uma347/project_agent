@@ -8,11 +8,11 @@ type TransactionMock = {
 };
 
 const product = {
-  id: '5bf4eabc-9b9d-474a-b619-99ac88877777',
-  sku: 'TOTTO-BACKPACK-001',
-  name: 'Mochila Totto Campus',
+  id: 'burger_classic',
+  sku: 'BURGER-CLASSIC',
+  name: 'Hamburguesa clasica',
   description: 'Mochila simulada para cotizaciones.',
-  priceCents: 24900,
+  priceCents: 1200,
   active: true,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -24,7 +24,16 @@ describe('QuotesService', () => {
   } as unknown as ConfigService;
 
   it('creates a quote pending human approval', async () => {
-    const eventCreate = jest.fn().mockResolvedValue({});
+    const natsRequestClient = {
+      request: jest.fn().mockResolvedValue({
+        productId: 'burger_classic',
+        quantity: 2,
+        reason: 'Producto identificado desde la intencion del usuario',
+      }),
+    };
+    const eventCreate = jest
+      .fn<Promise<unknown>, [{ data: { eventType: string } }]>()
+      .mockResolvedValue({});
     const quoteCreate = jest.fn().mockResolvedValue({
       id: 'quote-id',
       productId: product.id,
@@ -53,15 +62,29 @@ describe('QuotesService', () => {
         }),
       ),
     };
-    const service = new QuotesService(prisma as never, configService);
+    const service = new QuotesService(
+      prisma as never,
+      natsRequestClient as never,
+      configService,
+    );
 
     const response = await service.create({
-      productId: product.id,
-      quantity: 2,
+      prompt: 'quiero comprar dos hamburguesas',
     });
 
+    expect(natsRequestClient.request).toHaveBeenCalledWith(
+      'ai.intent.interpret',
+      {
+        prompt: 'quiero comprar dos hamburguesas',
+      },
+    );
+    expect(prisma.product.findUnique).toHaveBeenCalledWith({
+      where: { id: 'burger_classic' },
+    });
     expect(response.status).toBe(QuoteStatus.PENDING_HUMAN_APPROVAL);
-    expect(response.totalCents).toBe(49800);
+    expect(response.totalCents).toBe(2400);
     expect(eventCreate).toHaveBeenCalledTimes(1);
+    const eventCreateCall = eventCreate.mock.calls[0]?.[0];
+    expect(eventCreateCall.data.eventType).toBe('QUOTE_CREATED');
   });
 });
