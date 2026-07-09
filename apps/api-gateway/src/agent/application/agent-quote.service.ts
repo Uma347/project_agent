@@ -1,7 +1,8 @@
 import {
   BadGatewayException,
-  BadRequestException,
   GatewayTimeoutException,
+  HttpException,
+  HttpStatus,
   Injectable,
 } from '@nestjs/common';
 import { NatsRequestClient } from '../../infrastructure/nats/nats-request.client';
@@ -46,8 +47,8 @@ export class AgentQuoteService {
     try {
       return await this.natsRequestClient.request(subject, payload);
     } catch (error) {
-      if (this.isRpcBadRequest(error)) {
-        throw new BadRequestException(error.message);
+      if (this.isRpcHttpError(error)) {
+        throw new HttpException(error.message, error.statusCode);
       }
 
       if (error instanceof Error && error.name === 'TimeoutError') {
@@ -58,13 +59,21 @@ export class AgentQuoteService {
     }
   }
 
-  private isRpcBadRequest(error: unknown): error is { message: string } {
+  private isRpcHttpError(
+    error: unknown,
+  ): error is { statusCode: number; message: string } {
+    const statusCode =
+      typeof error === 'object' && error !== null && 'statusCode' in error
+        ? Number((error as { statusCode: unknown }).statusCode)
+        : Number.NaN;
+
     return (
       typeof error === 'object' &&
       error !== null &&
-      'statusCode' in error &&
       'message' in error &&
-      Number((error as { statusCode: unknown }).statusCode) === 400 &&
+      Number.isInteger(statusCode) &&
+      statusCode >= HttpStatus.BAD_REQUEST &&
+      statusCode < HttpStatus.INTERNAL_SERVER_ERROR &&
       typeof (error as { message: unknown }).message === 'string'
     );
   }
