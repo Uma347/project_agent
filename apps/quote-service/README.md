@@ -11,7 +11,7 @@ PostgreSQL usando TypeORM.
 | `agent.quote.create` | `{ "prompt": "quiero comprar dos hamburguesas" }` | Interpreta la intencion con `ai-agent` y crea una cotizacion en `PENDING_HUMAN_APPROVAL`. |
 | `agent.quote.approve` | `{ "quoteId": "uuid", "approvedBy": "human-id" }` | Aprueba una cotizacion vigente. |
 | `agent.quote.reject` | `{ "quoteId": "uuid", "rejectedBy": "human-id" }` | Rechaza una cotizacion. |
-| `agent.quote.execute` | `{ "quoteId": "uuid" }` | Ejecuta una compra simulada solo si fue aprobada. |
+| `agent.quote.execute` | `{ "quoteId": "uuid" }` | Ejecuta una compra simulada en `payment-simulator` solo si fue aprobada. |
 
 ## Reglas implementadas
 
@@ -20,7 +20,9 @@ PostgreSQL usando TypeORM.
 - La expiracion se calcula con `QUOTE_EXPIRATION_MINUTES`, por defecto 10.
 - Una cotizacion expirada no puede aprobarse ni ejecutarse.
 - La ejecucion solo ocurre si la cotizacion fue aprobada por un humano.
-- La ejecucion es idempotente: llamadas repetidas devuelven el mismo resultado.
+- La ejecucion llama por Request/Reply a `payment.simulate.execute`.
+- La ejecucion es idempotente en `quote-service`: llamadas repetidas devuelven
+  el mismo resultado guardado sin volver a llamar al simulador.
 - Cada accion registra un evento en `quote_events`.
 
 ## Estructura

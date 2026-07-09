@@ -22,6 +22,21 @@ describe('QuotesService', () => {
     getOrThrow: jest.fn().mockReturnValue(10),
   } as unknown as ConfigService;
 
+  function createService(options: {
+    dataSource: Partial<DataSource>;
+    products?: Partial<Repository<Product>>;
+    quotes?: Partial<Repository<Quote>>;
+    natsRequestClient: { request: jest.Mock };
+  }) {
+    return new QuotesService(
+      options.dataSource as DataSource,
+      (options.products ?? {}) as Repository<Product>,
+      (options.quotes ?? {}) as Repository<Quote>,
+      options.natsRequestClient as never,
+      configService,
+    );
+  }
+
   it('creates a quote pending human approval', async () => {
     const natsRequestClient = {
       request: jest.fn().mockResolvedValue({
@@ -71,14 +86,11 @@ describe('QuotesService', () => {
     const products = {
       findOne: jest.fn().mockResolvedValue(product),
     };
-    const service = new QuotesService(
-      dataSource as unknown as DataSource,
-      products as unknown as Repository<Product>,
-      {} as Repository<Quote>,
-      {} as Repository<QuoteEvent>,
-      natsRequestClient as never,
-      configService,
-    );
+    const service = createService({
+      dataSource: dataSource as unknown as DataSource,
+      products,
+      natsRequestClient,
+    });
 
     const response = await service.create({
       prompt: 'quiero comprar dos hamburguesas',
@@ -98,5 +110,157 @@ describe('QuotesService', () => {
     expect(eventCreate).toHaveBeenCalledTimes(1);
     const eventCreateCall = eventCreate.mock.calls[0]?.[0];
     expect(eventCreateCall.eventType).toBe('QUOTE_CREATED');
+  });
+
+  it('executes an approved quote through the payment simulator', async () => {
+    const paymentResponse = {
+      purchaseId: 'pur_123',
+      status: 'SIMULATED_SUCCESS',
+      provider: 'qhantuy-payment-simulator',
+      quoteId: 'quote-id',
+      amountCents: 2400,
+      currency: 'BOB',
+      executedAt: new Date().toISOString(),
+      message:
+        'Compra simulada ejecutada correctamente. No se movió dinero real.',
+    };
+    const quote = {
+      id: 'quote-id',
+      productId: product.id,
+      product,
+      quantity: 2,
+      unitPriceCents: product.priceCents,
+      totalCents: 2400,
+      status: QuoteStatus.APPROVED_BY_HUMAN,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      approvedAt: new Date(),
+      rejectedAt: null,
+      executedAt: null,
+      executionId: null,
+      executionResult: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Quote;
+    const quoteRepository = {
+      findOne: jest.fn().mockResolvedValue(quote),
+      save: jest.fn(async (payload: Quote) => payload),
+    };
+    const productRepository = {
+      findOne: jest.fn().mockResolvedValue(product),
+    };
+    const eventRepository = {
+      create: jest.fn((payload: Partial<QuoteEvent>) => payload as QuoteEvent),
+      save: jest.fn(),
+    };
+    const dataSource = {
+      transaction: jest.fn((callback: (manager: unknown) => unknown) =>
+        callback({
+          getRepository: jest.fn((entity: unknown) =>
+            entity === Quote
+              ? quoteRepository
+              : entity === Product
+                ? productRepository
+                : eventRepository,
+          ),
+        }),
+      ),
+    };
+    const natsRequestClient = {
+      request: jest.fn().mockResolvedValue(paymentResponse),
+    };
+    const service = createService({
+      dataSource: dataSource as unknown as DataSource,
+      natsRequestClient,
+    });
+
+    const response = await service.execute({
+      quoteId: 'quote-id',
+      executedBy: 'human-operator-1',
+    });
+
+    expect(natsRequestClient.request).toHaveBeenCalledWith(
+      'payment.simulate.execute',
+      {
+        quoteId: 'quote-id',
+        amountCents: 2400,
+        currency: 'BOB',
+        idempotencyKey: 'quote-id',
+      },
+    );
+    expect(quoteRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 'quote-id' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(productRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 'burger_classic' },
+    });
+    expect(response.status).toBe(QuoteStatus.EXECUTED);
+    expect(response.executionResult).toEqual(paymentResponse);
+    expect(eventRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'QUOTE_EXECUTED',
+      }),
+    );
+  });
+
+  it('returns an executed quote without calling the payment simulator again', async () => {
+    const executionResult = {
+      purchaseId: 'pur_123',
+      status: 'SIMULATED_SUCCESS',
+    };
+    const quote = {
+      id: 'quote-id',
+      productId: product.id,
+      product,
+      quantity: 2,
+      unitPriceCents: product.priceCents,
+      totalCents: 2400,
+      status: QuoteStatus.EXECUTED,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      approvedAt: new Date(),
+      rejectedAt: null,
+      executedAt: new Date(),
+      executionId: 'quote-id',
+      executionResult,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Quote;
+    const quoteRepository = {
+      findOne: jest.fn().mockResolvedValue(quote),
+    };
+    const productRepository = {
+      findOne: jest.fn().mockResolvedValue(product),
+    };
+    const dataSource = {
+      transaction: jest.fn((callback: (manager: unknown) => unknown) =>
+        callback({
+          getRepository: jest.fn((entity: unknown) =>
+            entity === Quote ? quoteRepository : productRepository,
+          ),
+        }),
+      ),
+    };
+    const natsRequestClient = {
+      request: jest.fn(),
+    };
+    const service = createService({
+      dataSource: dataSource as unknown as DataSource,
+      natsRequestClient,
+    });
+
+    const response = await service.execute({
+      quoteId: 'quote-id',
+      executedBy: 'human-operator-1',
+    });
+
+    expect(natsRequestClient.request).not.toHaveBeenCalled();
+    expect(quoteRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 'quote-id' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(productRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 'burger_classic' },
+    });
+    expect(response.executionResult).toEqual(executionResult);
   });
 });
