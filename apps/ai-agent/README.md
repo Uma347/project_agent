@@ -1,8 +1,9 @@
 # AI Agent
 
-Servicio Python 3.12 que interpreta una intencion de compra y responde que
-producto del catalogo simulado debe cotizarse. No escribe en base de datos, no
-aprueba cotizaciones y no ejecuta compras.
+Servicio Python 3.12 que interpreta una intencion de compra, calcula una
+cantidad cuando no viene explicita y selecciona un producto validandolo contra
+el catalogo real del `quote-service`. No escribe en base de datos, no aprueba
+cotizaciones y no ejecuta compras.
 
 ## Subject NATS
 
@@ -26,7 +27,7 @@ Salida exitosa:
 {
   "productId": "burger_classic",
   "quantity": 2,
-  "reason": "Producto identificado desde la intencion del usuario"
+  "reason": "Producto identificado desde la intencion del usuario y validado contra el catalogo real."
 }
 ```
 
@@ -36,16 +37,42 @@ Salida con error:
 {
   "error": {
     "code": "PRODUCT_NOT_IDENTIFIED",
-    "message": "No se pudo identificar un producto del catalogo simulado."
+    "message": "No se pudo identificar un producto disponible en el catalogo."
   }
 }
 ```
 
-## Catalogo simulado
+## Consulta de catalogo
 
-- `burger_classic`
-- `fries_regular`
-- `soda_regular`
+El agente no mantiene productos en memoria. Para identificar el producto,
+publica un Request/Reply NATS hacia:
+
+```text
+catalog.products.search
+```
+
+Payload enviado:
+
+```json
+{
+  "query": "quiero comprar dos hamburguesas",
+  "limit": 5
+}
+```
+
+Si el catalogo no responde o hay timeout, el agente devuelve:
+
+```json
+{
+  "error": {
+    "code": "CATALOG_SERVICE_UNAVAILABLE",
+    "message": "No fue posible consultar el catalogo de productos."
+  }
+}
+```
+
+El subject `catalog.products.search` es atendido por `quote-service`, que es la
+fuente de verdad del catalogo.
 
 ## Variables de entorno
 
@@ -55,6 +82,7 @@ Ver `.env.example`.
 | --- | --- | --- |
 | `NATS_SERVERS` | Lista separada por comas de servidores NATS. | `nats://localhost:4222` |
 | `NATS_QUEUE` | Queue group del agente. | `ai-agent` |
+| `CATALOG_REQUEST_TIMEOUT_SECONDS` | Timeout para consultar el catalogo real. | `3` |
 
 ## Ejecucion local
 
