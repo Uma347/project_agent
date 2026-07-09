@@ -2,22 +2,29 @@
 
 Servicio NestJS responsable de la logica de negocio de cotizaciones. No expone
 endpoints HTTP: consume mensajes NATS Request/Reply y persiste estado en
-PostgreSQL usando TypeORM.
+PostgreSQL usando TypeORM. Tambien es la fuente de verdad del catalogo de
+productos que usa el agente para interpretar intenciones.
 
 ## Subjects NATS
 
 | Subject | Payload minimo | Descripcion |
 | --- | --- | --- |
-| `agent.quote.create` | `{ "prompt": "quiero comprar dos hamburguesas", "requestedByUserId": "uuid" }` | Interpreta la intencion con `ai-agent` y crea una cotizacion en `PENDING_HUMAN_APPROVAL`. |
+| `agent.quote.create` | `{ "prompt": "quiero comprar hamburguesas", "requestedByUserId": "uuid", "quantity": 2 }` | Interpreta la intencion con `ai-agent` y crea una cotizacion en `PENDING_HUMAN_APPROVAL`. `quantity` es opcional y tiene prioridad sobre la cantidad interpretada. |
 | `agent.quote.approve` | `{ "quoteId": "uuid", "approvedByUserId": "uuid" }` | Aprueba una cotizacion vigente. |
 | `agent.quote.reject` | `{ "quoteId": "uuid", "rejectedByUserId": "uuid" }` | Rechaza una cotizacion. |
 | `agent.quote.execute` | `{ "quoteId": "uuid" }` | Ejecuta una compra simulada en `payment-simulator` solo si fue aprobada. |
+| `catalog.products.search` | `{ "query": "quiero tres hamburguesas", "limit": 5 }` | Busca productos activos del catalogo por intencion. |
 
 ## Reglas implementadas
 
 - Toda cotizacion nueva queda en `PENDING_HUMAN_APPROVAL`.
 - La creacion, aprobacion y rechazo requieren un usuario activo del dominio.
 - La creacion llama por Request/Reply a `ai.intent.interpret`.
+- El agente no tiene catalogo propio: llama a `catalog.products.search`.
+- El catalogo se busca por `name`, `description`, `category`, `keywords` y
+  `tags`, sin sensibilidad a mayusculas/minusculas.
+- Si `agent.quote.create` recibe `quantity`, esa cantidad se usa para calcular
+  el total. Si no la recibe, se usa la cantidad interpretada por el agente.
 - La expiracion se calcula con `QUOTE_EXPIRATION_MINUTES`, por defecto 10.
 - Una cotizacion expirada no puede aprobarse ni ejecutarse.
 - La ejecucion solo ocurre si la cotizacion fue aprobada por un humano.
@@ -56,8 +63,48 @@ Entidades TypeORM:
 - `Quote`
 - `QuoteEvent`
 
-El esquema se crea desde las entidades TypeORM. El catalogo simulado y los
+El esquema se crea desde las entidades TypeORM. El catalogo inicial y los
 usuarios de dominio se siembran al iniciar el servicio.
+
+La entidad `Product` incluye campos para busqueda por intencion:
+
+- `category text null`
+- `keywords text[] not null default '{}'`
+- `tags text[] not null default '{}'`
+- `metadata jsonb null`
+
+Existe una migracion TypeORM para agregar estos campos en:
+
+```text
+src/infrastructure/typeorm/migrations/1720000000000-AddIntentSearchFieldsToProducts.ts
+```
+
+Productos iniciales:
+
+| ID | SKU | Nombre | Categoria | Tags |
+| --- | --- | --- | --- | --- |
+| `burger_classic` | `BURGER-CLASSIC` | Hamburguesa clasica | `food` | `comida`, `clasico`, `carne` |
+| `fries_regular` | `FRIES-REGULAR` | Papas fritas | `food` | `comida`, `acompanamiento` |
+| `soda_regular` | `SODA-REGULAR` | Gaseosa regular | `drink` | `bebida`, `gaseosa` |
+
+Ejemplo de respuesta de `catalog.products.search`:
+
+```json
+{
+  "products": [
+    {
+      "productId": "burger_classic",
+      "sku": "BURGER-CLASSIC",
+      "name": "Hamburguesa clasica",
+      "description": "Hamburguesa clasica de carne para cotizaciones demo.",
+      "category": "food",
+      "keywords": ["hamburguesa", "hamburguesas", "burger", "burgers"],
+      "tags": ["comida", "clasico", "carne"],
+      "priceCents": 2500
+    }
+  ]
+}
+```
 
 Usuarios iniciales:
 

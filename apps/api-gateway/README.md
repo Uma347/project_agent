@@ -72,8 +72,21 @@ Crear cotizacion desde una intencion:
 ```bash
 curl -X POST http://localhost:3000/api/agent/quote \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"quiero comprar dos hamburguesas\",\"requestedByUserId\":\"11111111-1111-4111-8111-111111111111\"}"
+  -d "{\"prompt\":\"quiero comprar hamburguesas\",\"requestedByUserId\":\"11111111-1111-4111-8111-111111111111\",\"quantity\":3}"
 ```
+
+Body:
+
+```json
+{
+  "prompt": "quiero comprar hamburguesas",
+  "requestedByUserId": "11111111-1111-4111-8111-111111111111",
+  "quantity": 3
+}
+```
+
+`quantity` es opcional. Si se envia, el Quote Service calcula el total con esa
+cantidad. Si no se envia, el agente intenta interpretarla desde el `prompt`.
 
 Aprobar cotizacion:
 
@@ -133,6 +146,3 @@ npm run test:e2e
 ## Pendiente
 
 - Autenticacion.
-- Endpoints del agente.
-- Endpoints de cotizaciones.
-- Persistencia.

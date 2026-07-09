@@ -2,7 +2,8 @@
 
 Flujo de compra asistido por IA con aprobacion humana obligatoria. El usuario
 envia una intencion de compra por HTTP, el gateway la publica por NATS,
-`quote-service` consulta al `ai-agent`, crea una cotizacion y solo permite
+`quote-service` consulta al `ai-agent`, el agente valida el producto contra el
+catalogo real del `quote-service`, se crea una cotizacion y solo se permite
 ejecutarla si fue aprobada por una persona. Al ejecutar, `quote-service`
 solicita una compra simulada al `payment-simulator`; no se mueve dinero real.
 
@@ -19,7 +20,7 @@ API Gateway (NestJS)
 NATS
   |--------------------------|-------------------------------|
   v                          v                               v
-Quote Service (NestJS)    AI Agent (Python)    Payment Simulator (Python)
+Quote Service (NestJS) <-> AI Agent (Python)    Payment Simulator (Python)
   |
   v
 PostgreSQL
@@ -28,8 +29,10 @@ PostgreSQL
 ## Servicios
 
 - `apps/api-gateway`: API REST para Postman. No contiene logica de negocio.
-- `apps/quote-service`: reglas de negocio de cotizaciones y persistencia.
-- `apps/ai-agent`: interpreta intenciones de compra con catalogo simulado.
+- `apps/quote-service`: reglas de negocio de cotizaciones, persistencia y
+  fuente de verdad del catalogo de productos.
+- `apps/ai-agent`: interpreta intenciones de compra, calcula cantidad desde el
+  prompt cuando hace falta y consulta el catalogo real por NATS.
 - `apps/payment-simulator`: simula la ejecucion de compra/pago por NATS,
   sin base de datos y sin mover dinero real.
 - `infra/docker-compose.yml`: levanta todo el stack.
@@ -55,7 +58,16 @@ Servicios expuestos:
 - PostgreSQL: `localhost:5433`
 
 El contenedor `quote-service` usa TypeORM para crear el esquema y sembrar el
-catalogo simulado al iniciar.
+catalogo inicial al iniciar. Los productos incluyen `category`, `keywords`,
+`tags` y `metadata` para busqueda por intencion.
+
+Productos iniciales:
+
+| ID | SKU | Nombre | Categoria | Keywords |
+| --- | --- | --- | --- | --- |
+| `burger_classic` | `BURGER-CLASSIC` | Hamburguesa clasica | `food` | `hamburguesa`, `hamburguesas`, `burger`, `burgers` |
+| `fries_regular` | `FRIES-REGULAR` | Papas fritas | `food` | `papas`, `papas fritas`, `fritas`, `fries` |
+| `soda_regular` | `SODA-REGULAR` | Gaseosa regular | `drink` | `gaseosa`, `refresco`, `soda`, `bebida` |
 
 Usuarios de dominio sembrados:
 
@@ -92,9 +104,23 @@ Content-Type: application/json
 
 {
   "prompt": "quiero comprar dos hamburguesas",
-  "requestedByUserId": "11111111-1111-4111-8111-111111111111"
+  "requestedByUserId": "11111111-1111-4111-8111-111111111111",
+  "quantity": 2
 }
 ```
+
+`quantity` es opcional. Si se envia, tiene prioridad sobre la cantidad que el
+agente pueda interpretar desde el `prompt`; si no se envia, el agente intenta
+extraerla desde texto como `dos`, `tres` o `5`.
+
+Durante la creacion de cotizacion:
+
+1. `quote-service` valida el usuario activo.
+2. `quote-service` llama a `ai.intent.interpret`.
+3. `ai-agent` consulta `catalog.products.search` en `quote-service`.
+4. `quote-service` busca productos activos por `name`, `description`,
+   `category`, `keywords` y `tags`.
+5. `quote-service` calcula `totalCents = unitPriceCents * quantity`.
 
 Aprobar cotizacion:
 
@@ -162,6 +188,7 @@ Variables principales:
 - `DATABASE_URL`
 - `NATS_SERVERS`
 - `NATS_REQUEST_TIMEOUT_MS`
+- `CATALOG_REQUEST_TIMEOUT_SECONDS`
 - `PORT`
 - `API_GLOBAL_PREFIX`
 - `QUOTE_EXPIRATION_MINUTES`
