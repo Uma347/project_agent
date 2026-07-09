@@ -191,6 +191,72 @@ describe('QuotesService', () => {
     ).rejects.toBeInstanceOf(UserInactiveError);
   });
 
+  it('uses the explicit payload quantity when creating a quote', async () => {
+    const natsRequestClient = {
+      request: jest.fn().mockResolvedValue({
+        productId: 'burger_classic',
+        quantity: 2,
+        reason: 'Producto identificado desde la intencion del usuario',
+      }),
+    };
+    const quoteRepository = {
+      create: jest.fn((payload: Partial<Quote>) => payload as Quote),
+      save: jest.fn(async (payload: Quote) => ({
+        id: 'quote-id',
+        ...payload,
+        approvedByUserId: null,
+        approvedBy: null,
+        rejectedByUserId: null,
+        rejectedBy: null,
+        approvedAt: null,
+        rejectedAt: null,
+        executedAt: null,
+        executionId: null,
+        executionResult: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
+    };
+    const eventRepository = {
+      create: jest.fn((payload: Partial<QuoteEvent>) => payload as QuoteEvent),
+      save: jest.fn(),
+    };
+    const dataSource = {
+      transaction: jest.fn((callback: (manager: unknown) => unknown) =>
+        callback({
+          getRepository: jest.fn((entity: unknown) =>
+            entity === Quote ? quoteRepository : eventRepository,
+          ),
+        }),
+      ),
+    };
+    const service = createService({
+      dataSource: dataSource as unknown as DataSource,
+      products: {
+        findOne: jest.fn().mockResolvedValue(product),
+      },
+      users: {
+        findOne: jest.fn().mockResolvedValue(user),
+      },
+      natsRequestClient,
+    });
+
+    const response = await service.create({
+      prompt: 'quiero comprar dos hamburguesas',
+      requestedByUserId: user.id,
+      quantity: 3,
+    });
+
+    expect(response.quantity).toBe(3);
+    expect(response.totalCents).toBe(product.priceCents * 3);
+    expect(quoteRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quantity: 3,
+        totalCents: product.priceCents * 3,
+      }),
+    );
+  });
+
   it('executes an approved quote through the payment simulator', async () => {
     const paymentResponse = {
       purchaseId: 'pur_123',

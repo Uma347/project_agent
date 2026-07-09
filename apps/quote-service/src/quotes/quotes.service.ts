@@ -87,13 +87,13 @@ export class QuotesService {
       throw new QuoteDomainError(interpretation.error.message);
     }
 
-    const interpretedQuantity = interpretation.quantity;
+    const quantity = payload.quantity ?? interpretation.quantity;
 
     if (
       !interpretation.productId ||
-      !Number.isInteger(interpretedQuantity) ||
-      interpretedQuantity === undefined ||
-      interpretedQuantity < 1
+      !Number.isInteger(quantity) ||
+      quantity === undefined ||
+      quantity < 1
     ) {
       throw new QuoteDomainError(
         'AI agent returned an invalid quote interpretation.',
@@ -110,7 +110,6 @@ export class QuotesService {
 
     const now = new Date();
     const expiresAt = this.addMinutes(now, this.expirationMinutes);
-    const quantity = interpretedQuantity;
     const unitPriceCents = product.priceCents;
     const totalCents = unitPriceCents * quantity;
 

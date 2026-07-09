@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateQuoteRequestDto {
   @ApiProperty({
@@ -14,4 +14,15 @@ export class CreateQuoteRequestDto {
   })
   @IsUUID()
   requestedByUserId!: string;
+
+  @ApiPropertyOptional({
+    example: 3,
+    minimum: 1,
+    description:
+      'Cantidad solicitada. Si se envia, tiene prioridad sobre la cantidad interpretada desde el prompt.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quantity?: number;
 }
