@@ -72,7 +72,7 @@ Crear cotizacion desde una intencion:
 ```bash
 curl -X POST http://localhost:3000/api/agent/quote \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"quiero comprar dos hamburguesas\"}"
+  -d "{\"prompt\":\"quiero comprar dos hamburguesas\",\"requestedByUserId\":\"11111111-1111-4111-8111-111111111111\"}"
 ```
 
 Aprobar cotizacion:
@@ -80,7 +80,7 @@ Aprobar cotizacion:
 ```bash
 curl -X POST http://localhost:3000/api/agent/quote/{quote_id}/approve \
   -H "Content-Type: application/json" \
-  -d "{\"approvedBy\":\"human-operator-1\"}"
+  -d "{\"approvedByUserId\":\"22222222-2222-4222-8222-222222222222\"}"
 ```
 
 Rechazar cotizacion:
@@ -88,7 +88,7 @@ Rechazar cotizacion:
 ```bash
 curl -X POST http://localhost:3000/api/agent/quote/{quote_id}/reject \
   -H "Content-Type: application/json" \
-  -d "{\"rejectedBy\":\"human-operator-1\",\"reason\":\"Cliente no confirmo\"}"
+  -d "{\"rejectedByUserId\":\"33333333-3333-4333-8333-333333333333\",\"reason\":\"Cliente no confirmo\"}"
 ```
 
 Ejecutar compra simulada:

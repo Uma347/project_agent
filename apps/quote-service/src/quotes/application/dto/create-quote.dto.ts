@@ -1,11 +1,10 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
 
 export class CreateQuoteDto {
   @IsString()
   @IsNotEmpty()
   prompt!: string;
 
-  @IsOptional()
-  @IsString()
-  requestedBy?: string;
+  @IsUUID()
+  requestedByUserId!: string;
 }
