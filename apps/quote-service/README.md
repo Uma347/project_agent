@@ -2,7 +2,7 @@
 
 Servicio NestJS responsable de la logica de negocio de cotizaciones. No expone
 endpoints HTTP: consume mensajes NATS Request/Reply y persiste estado en
-PostgreSQL usando Prisma.
+PostgreSQL usando TypeORM.
 
 ## Subjects NATS
 
@@ -29,7 +29,8 @@ PostgreSQL usando Prisma.
 src/
 |-- config/
 |-- infrastructure/
-|   `-- prisma/
+|   |-- nats/
+|   `-- typeorm/
 |-- quotes/
 |   |-- application/
 |   |   `-- dto/
@@ -43,18 +44,14 @@ src/
 
 ## Base de datos
 
-Modelos Prisma:
+Entidades TypeORM:
 
 - `Product`
 - `Quote`
 - `QuoteEvent`
 
-Archivos:
-
-- `prisma/schema.prisma`
-- `prisma/migrations/20260708210000_init/migration.sql`
-- `prisma/seed.js`
-- `prisma/seed.ts`
+El esquema se crea desde las entidades TypeORM y el catalogo simulado se
+siembra al iniciar el servicio.
 
 ## Variables de entorno
 
@@ -62,7 +59,7 @@ Ver `.env.example`.
 
 | Variable | Descripcion |
 | --- | --- |
-| `DATABASE_URL` | Conexion PostgreSQL usada por Prisma. |
+| `DATABASE_URL` | Conexion PostgreSQL usada por TypeORM. |
 | `NATS_SERVERS` | Lista separada por comas de servidores NATS. |
 | `NATS_QUEUE` | Queue group del servicio. |
 | `NATS_REQUEST_TIMEOUT_MS` | Timeout para requests NATS hacia otros servicios. |
@@ -72,8 +69,6 @@ Ver `.env.example`.
 
 ```bash
 npm install
-npx prisma migrate dev
-npm run prisma:seed
 npm run start:dev
 ```
 
@@ -83,7 +78,6 @@ npm run start:dev
 npm run build
 npm run lint
 npm run test
-npx prisma studio
 ```
 
 ## Docker

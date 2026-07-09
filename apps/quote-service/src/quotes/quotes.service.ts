@@ -1,20 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  Prisma,
-  Product,
-  Quote,
-  QuoteEventType as PrismaQuoteEventType,
-  QuoteStatus,
-} from '@prisma/client';
+import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { NatsRequestClient } from '../infrastructure/nats/nats-request.client';
-import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { ApproveQuoteDto } from './application/dto/approve-quote.dto';
 import { CreateQuoteDto } from './application/dto/create-quote.dto';
 import { ExecuteQuoteDto } from './application/dto/execute-quote.dto';
 import { RejectQuoteDto } from './application/dto/reject-quote.dto';
 import { QuoteDomainError } from './domain/quote.errors';
+import { QuoteEventType, QuoteStatus } from './domain/quote.enums';
+import { Product } from './infrastructure/typeorm/product.entity';
+import { QuoteEvent } from './infrastructure/typeorm/quote-event.entity';
+import { Quote } from './infrastructure/typeorm/quote.entity';
 
 type IntentInterpretationResponse = {
   productId?: string;
@@ -31,7 +29,13 @@ export class QuotesService {
   private readonly expirationMinutes: number;
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly dataSource: DataSource,
+    @InjectRepository(Product)
+    private readonly products: Repository<Product>,
+    @InjectRepository(Quote)
+    private readonly quotes: Repository<Quote>,
+    @InjectRepository(QuoteEvent)
+    private readonly quoteEvents: Repository<QuoteEvent>,
     private readonly natsRequestClient: NatsRequestClient,
     configService: ConfigService,
   ) {
@@ -66,7 +70,7 @@ export class QuotesService {
       );
     }
 
-    const product = await this.prisma.product.findUnique({
+    const product = await this.products.findOne({
       where: { id: interpretation.productId },
     });
 
@@ -80,23 +84,23 @@ export class QuotesService {
     const unitPriceCents = product.priceCents;
     const totalCents = unitPriceCents * quantity;
 
-    const quote = await this.prisma.$transaction(async (tx) => {
-      const createdQuote = await tx.quote.create({
-        data: {
+    const quote = await this.dataSource.transaction(async (manager) => {
+      const createdQuote = await manager.getRepository(Quote).save(
+        manager.getRepository(Quote).create({
           productId: product.id,
+          product,
           quantity,
           unitPriceCents,
           totalCents,
           status: QuoteStatus.PENDING_HUMAN_APPROVAL,
           expiresAt,
-        },
-        include: { product: true },
-      });
+        }),
+      );
 
       await this.recordEvent(
-        tx,
+        manager,
         createdQuote.id,
-        PrismaQuoteEventType.QUOTE_CREATED,
+        QuoteEventType.QUOTE_CREATED,
         {
           requestedBy: payload.requestedBy,
           prompt: payload.prompt,
@@ -130,20 +134,15 @@ export class QuotesService {
       return this.toResponse(quote);
     }
 
-    const updatedQuote = await this.prisma.$transaction(async (tx) => {
-      const approvedQuote = await tx.quote.update({
-        where: { id: payload.quoteId },
-        data: {
-          status: QuoteStatus.APPROVED,
-          approvedAt: new Date(),
-        },
-        include: { product: true },
-      });
+    const updatedQuote = await this.dataSource.transaction(async (manager) => {
+      quote.status = QuoteStatus.APPROVED;
+      quote.approvedAt = new Date();
+      const approvedQuote = await manager.getRepository(Quote).save(quote);
 
       await this.recordEvent(
-        tx,
+        manager,
         approvedQuote.id,
-        PrismaQuoteEventType.APPROVED,
+        QuoteEventType.APPROVED,
         {
           approvedBy: payload.approvedBy,
           note: payload.note,
@@ -167,20 +166,15 @@ export class QuotesService {
       return this.toResponse(quote);
     }
 
-    const updatedQuote = await this.prisma.$transaction(async (tx) => {
-      const rejectedQuote = await tx.quote.update({
-        where: { id: payload.quoteId },
-        data: {
-          status: QuoteStatus.REJECTED,
-          rejectedAt: new Date(),
-        },
-        include: { product: true },
-      });
+    const updatedQuote = await this.dataSource.transaction(async (manager) => {
+      quote.status = QuoteStatus.REJECTED;
+      quote.rejectedAt = new Date();
+      const rejectedQuote = await manager.getRepository(Quote).save(quote);
 
       await this.recordEvent(
-        tx,
+        manager,
         rejectedQuote.id,
-        PrismaQuoteEventType.REJECTED,
+        QuoteEventType.REJECTED,
         {
           rejectedBy: payload.rejectedBy,
           reason: payload.reason,
@@ -197,16 +191,16 @@ export class QuotesService {
     const quote = await this.findQuoteOrThrow(payload.quoteId);
 
     if (quote.status === QuoteStatus.EXECUTED) {
-      await this.prisma.quoteEvent.create({
-        data: {
+      await this.quoteEvents.save(
+        this.quoteEvents.create({
           quoteId: quote.id,
-          eventType: PrismaQuoteEventType.EXECUTION_REPLAYED,
+          eventType: QuoteEventType.EXECUTION_REPLAYED,
           metadata: {
             executedBy: payload.executedBy,
-            executionResult: quote.executionResult,
+            executionResult: quote.executionResult ?? undefined,
           },
-        },
-      });
+        }),
+      );
 
       return this.toResponse(quote);
     }
@@ -226,38 +220,33 @@ export class QuotesService {
       executedAt: new Date().toISOString(),
     };
 
-    const updatedQuote = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.quote.updateMany({
-        where: {
-          id: payload.quoteId,
-          status: QuoteStatus.APPROVED,
-        },
-        data: {
-          status: QuoteStatus.EXECUTED,
-          executedAt: new Date(),
-          executionId,
-          executionResult,
-        },
+    const updatedQuote = await this.dataSource.transaction(async (manager) => {
+      const currentQuote = await manager.getRepository(Quote).findOne({
+        where: { id: payload.quoteId },
+        relations: { product: true },
       });
 
-      if (updated.count === 0) {
-        const currentQuote = await tx.quote.findUniqueOrThrow({
-          where: { id: payload.quoteId },
-          include: { product: true },
-        });
+      if (!currentQuote) {
+        throw new QuoteDomainError('Quote was not found.');
+      }
 
+      if (currentQuote.status !== QuoteStatus.APPROVED) {
         return currentQuote;
       }
 
-      const executedQuote = await tx.quote.findUniqueOrThrow({
-        where: { id: payload.quoteId },
-        include: { product: true },
-      });
+      currentQuote.status = QuoteStatus.EXECUTED;
+      currentQuote.executedAt = new Date();
+      currentQuote.executionId = executionId;
+      currentQuote.executionResult = executionResult;
+
+      const executedQuote = await manager
+        .getRepository(Quote)
+        .save(currentQuote);
 
       await this.recordEvent(
-        tx,
+        manager,
         executedQuote.id,
-        PrismaQuoteEventType.EXECUTED,
+        QuoteEventType.EXECUTED,
         {
           executedBy: payload.executedBy,
           executionResult,
@@ -271,9 +260,9 @@ export class QuotesService {
   }
 
   private async findQuoteOrThrow(quoteId: string) {
-    const quote = await this.prisma.quote.findUnique({
+    const quote = await this.quotes.findOne({
       where: { id: quoteId },
-      include: { product: true },
+      relations: { product: true },
     });
 
     if (!quote) {
@@ -294,23 +283,21 @@ export class QuotesService {
   }
 
   private async recordEvent(
-    tx: Prisma.TransactionClient,
+    manager: EntityManager,
     quoteId: string,
-    eventType: PrismaQuoteEventType,
-    metadata: Prisma.InputJsonValue,
+    eventType: QuoteEventType,
+    metadata: Record<string, unknown>,
   ) {
-    await tx.quoteEvent.create({
-      data: {
+    await manager.getRepository(QuoteEvent).save(
+      manager.getRepository(QuoteEvent).create({
         quoteId,
         eventType,
         metadata,
-      },
-    });
+      }),
+    );
   }
 
-  private toResponse(
-    quote: Quote & { product?: Pick<Product, 'name' | 'sku'> },
-  ) {
+  private toResponse(quote: Quote) {
     return {
       id: quote.id,
       status: quote.status,
