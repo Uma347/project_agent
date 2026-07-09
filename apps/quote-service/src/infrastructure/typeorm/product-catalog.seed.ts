@@ -9,15 +9,21 @@ const PRODUCTS: ProductSeed[] = [
     id: 'burger_classic',
     sku: 'BURGER-CLASSIC',
     name: 'Hamburguesa clasica',
-    description: 'Producto simulado interpretado por el AI Agent.',
-    priceCents: 1200,
+    description: 'Hamburguesa clasica de carne para cotizaciones demo.',
+    category: 'food',
+    keywords: ['hamburguesa', 'hamburguesas', 'burger', 'burgers'],
+    tags: ['comida', 'clasico', 'carne'],
+    priceCents: 2500,
     active: true,
   },
   {
     id: 'fries_regular',
     sku: 'FRIES-REGULAR',
     name: 'Papas fritas',
-    description: 'Producto simulado interpretado por el AI Agent.',
+    description: 'Porcion regular de papas fritas para acompanar pedidos.',
+    category: 'food',
+    keywords: ['papas', 'papas fritas', 'fritas', 'fries'],
+    tags: ['comida', 'acompanamiento'],
     priceCents: 600,
     active: true,
   },
@@ -25,7 +31,10 @@ const PRODUCTS: ProductSeed[] = [
     id: 'soda_regular',
     sku: 'SODA-REGULAR',
     name: 'Gaseosa regular',
-    description: 'Producto simulado interpretado por el AI Agent.',
+    description: 'Bebida gaseosa regular para pedidos de comida.',
+    category: 'drink',
+    keywords: ['gaseosa', 'refresco', 'soda', 'bebida'],
+    tags: ['bebida', 'gaseosa'],
     priceCents: 500,
     active: true,
   },
@@ -33,7 +42,15 @@ const PRODUCTS: ProductSeed[] = [
 
 type ProductSeed = Pick<
   Product,
-  'id' | 'sku' | 'name' | 'description' | 'priceCents' | 'active'
+  | 'id'
+  | 'sku'
+  | 'name'
+  | 'description'
+  | 'category'
+  | 'keywords'
+  | 'tags'
+  | 'priceCents'
+  | 'active'
 >;
 
 const USERS: UserSeed[] = [

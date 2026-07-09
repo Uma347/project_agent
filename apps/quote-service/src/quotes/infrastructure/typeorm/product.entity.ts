@@ -22,6 +22,18 @@ export class Product {
   @Column({ type: 'text', nullable: true })
   description!: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  category!: string | null;
+
+  @Column({ type: 'text', array: true, default: () => "'{}'" })
+  keywords!: string[];
+
+  @Column({ type: 'text', array: true, default: () => "'{}'" })
+  tags!: string[];
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata!: Record<string, unknown> | null;
+
   @Column({ name: 'price_cents', type: 'integer' })
   priceCents!: number;
 

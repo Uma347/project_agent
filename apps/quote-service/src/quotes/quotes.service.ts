@@ -1,8 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
+import { NATS_SUBJECTS } from '../infrastructure/nats/nats.constants';
 import { NatsRequestClient } from '../infrastructure/nats/nats-request.client';
+import {
+  CatalogProductSearchRequestDto,
+  CatalogProductSearchResponseDto,
+  CatalogSearchProductDto,
+} from './application/dto/catalog-search.dto';
 import { ApproveQuoteDto } from './application/dto/approve-quote.dto';
 import { CreateQuoteDto } from './application/dto/create-quote.dto';
 import { ExecuteQuoteDto } from './application/dto/execute-quote.dto';
@@ -46,6 +52,7 @@ type PaymentSimulationResponse = {
 
 @Injectable()
 export class QuotesService {
+  private readonly logger = new Logger(QuotesService.name);
   private readonly expirationMinutes: number;
 
   constructor(
@@ -70,7 +77,7 @@ export class QuotesService {
     );
     const interpretation =
       await this.natsRequestClient.request<IntentInterpretationResponse>(
-        'ai.intent.interpret',
+        NATS_SUBJECTS.AI_INTENT_INTERPRET,
         {
           prompt: payload.prompt,
         },
@@ -273,12 +280,80 @@ export class QuotesService {
     return this.toResponse(updatedQuote);
   }
 
+  async searchCatalogProducts(
+    payload: CatalogProductSearchRequestDto,
+  ): Promise<CatalogProductSearchResponseDto> {
+    if (!payload || typeof payload.query !== 'string' || !payload.query.trim()) {
+      return {
+        error: {
+          code: 'INVALID_CATALOG_SEARCH_REQUEST',
+          message:
+            "El campo 'query' es requerido y debe ser un texto no vacio.",
+        },
+      };
+    }
+
+    const query = payload.query.trim();
+    const limit =
+      typeof payload.limit === 'number' && Number.isInteger(payload.limit)
+        ? Math.min(Math.max(payload.limit, 1), 20)
+        : 5;
+    const terms = this.extractSearchTerms(query);
+
+    this.logger.debug(
+      `Searching catalog products for query="${query}" limit=${limit}`,
+    );
+
+    const queryBuilder = this.products
+      .createQueryBuilder('product')
+      .where('product.active = :active', { active: true })
+      .andWhere(
+        `(
+          product.name ILIKE :queryLike
+          OR product.description ILIKE :queryLike
+          OR product.category ILIKE :queryLike
+          OR EXISTS (
+            SELECT 1 FROM unnest(product.keywords) AS keyword(value)
+            WHERE lower(:query) LIKE '%' || lower(keyword.value) || '%'
+          )
+          OR EXISTS (
+            SELECT 1 FROM unnest(product.tags) AS tag(value)
+            WHERE lower(:query) LIKE '%' || lower(tag.value) || '%'
+          )
+          OR product.name ILIKE ANY(:termLikes)
+          OR product.description ILIKE ANY(:termLikes)
+          OR product.category ILIKE ANY(:termLikes)
+          OR EXISTS (
+            SELECT 1 FROM unnest(product.keywords) AS keyword(value)
+            WHERE keyword.value ILIKE ANY(:termLikes)
+          )
+          OR EXISTS (
+            SELECT 1 FROM unnest(product.tags) AS tag(value)
+            WHERE tag.value ILIKE ANY(:termLikes)
+          )
+        )`,
+        {
+          query,
+          queryLike: `%${query}%`,
+          termLikes: terms.map((term) => `%${term}%`),
+        },
+      )
+      .orderBy('product.name', 'ASC')
+      .take(limit);
+
+    const products = await queryBuilder.getMany();
+
+    return {
+      products: products.map((product) => this.toCatalogSearchProduct(product)),
+    };
+  }
+
   private async executeSimulatedPayment(
     quote: Quote,
   ): Promise<Record<string, unknown>> {
     const response =
       await this.natsRequestClient.request<PaymentSimulationResponse>(
-        'payment.simulate.execute',
+        NATS_SUBJECTS.PAYMENT_SIMULATE_EXECUTE,
         {
           quoteId: quote.id,
           amountCents: quote.totalCents,
@@ -396,6 +471,29 @@ export class QuotesService {
 
   private addMinutes(date: Date, minutes: number): Date {
     return new Date(date.getTime() + minutes * 60 * 1000);
+  }
+
+  private extractSearchTerms(query: string): string[] {
+    const terms = query
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .match(/[a-z0-9]+/g);
+
+    return terms && terms.length > 0 ? terms : [query.toLowerCase()];
+  }
+
+  private toCatalogSearchProduct(product: Product): CatalogSearchProductDto {
+    return {
+      productId: product.id,
+      sku: product.sku,
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      keywords: product.keywords,
+      tags: product.tags,
+      priceCents: product.priceCents,
+    };
   }
 
   private async recordEvent(

@@ -3,39 +3,14 @@ import json
 import os
 import re
 import signal
-from dataclasses import dataclass
+import uuid
 from typing import Any
 
 import nats
 from dotenv import load_dotenv
 
 SUBJECT = "ai.intent.interpret"
-
-
-@dataclass(frozen=True)
-class Product:
-    product_id: str
-    name: str
-    keywords: tuple[str, ...]
-
-
-CATALOG: tuple[Product, ...] = (
-    Product(
-        product_id="burger_classic",
-        name="Hamburguesa clasica",
-        keywords=("hamburguesa", "hamburguesas", "burger", "burgers"),
-    ),
-    Product(
-        product_id="fries_regular",
-        name="Papas fritas",
-        keywords=("papas", "papas fritas", "fritas", "fries"),
-    ),
-    Product(
-        product_id="soda_regular",
-        name="Gaseosa regular",
-        keywords=("gaseosa", "refresco", "soda", "bebida"),
-    ),
-)
+CATALOG_SEARCH_SUBJECT = "catalog.products.search"
 
 SPANISH_NUMBERS = {
     "un": 1,
@@ -53,11 +28,14 @@ SPANISH_NUMBERS = {
 }
 
 
-def success_response(product: Product, quantity: int) -> dict[str, Any]:
+def success_response(product: dict[str, Any], quantity: int) -> dict[str, Any]:
     return {
-        "productId": product.product_id,
+        "productId": product["productId"],
         "quantity": quantity,
-        "reason": "Producto identificado desde la intencion del usuario",
+        "reason": (
+            "Producto identificado desde la intencion del usuario y validado "
+            "contra el catalogo real."
+        ),
     }
 
 
@@ -68,10 +46,6 @@ def error_response(code: str, message: str) -> dict[str, Any]:
             "message": message,
         },
     }
-
-
-def normalize_text(value: str) -> str:
-    return value.strip().lower()
 
 
 def parse_quantity(prompt: str) -> int:
@@ -89,32 +63,70 @@ def parse_quantity(prompt: str) -> int:
     return 1
 
 
-def find_product(prompt: str) -> Product | None:
-    normalized_prompt = normalize_text(prompt)
-    for product in CATALOG:
-        if any(keyword in normalized_prompt for keyword in product.keywords):
-            return product
+async def search_catalog(
+    nc: Any, prompt: str, timeout_seconds: float
+) -> list[dict[str, Any]] | None:
+    request_id = uuid.uuid4().hex
+    request = {
+        "pattern": CATALOG_SEARCH_SUBJECT,
+        "data": {
+            "query": prompt,
+            "limit": 5,
+        },
+        "id": request_id,
+    }
+    response = await nc.request(
+        CATALOG_SEARCH_SUBJECT,
+        json.dumps(request).encode("utf-8"),
+        timeout=timeout_seconds,
+    )
+    print(f"AI AGENT CATALOG RAW DATA: {response.data.decode('utf-8')}")
+    payload = decode_payload(response.data)
+    if payload is None:
+        return None
 
-    return None
+    products = payload.get("products")
+    if not isinstance(products, list):
+        print(f"AI AGENT CATALOG INVALID PAYLOAD: {payload}")
+        return None
+
+    return [product for product in products if isinstance(product, dict)]
 
 
-def interpret_intent(payload: dict[str, Any]) -> dict[str, Any]:
+async def interpret_intent(
+    nc: Any, payload: dict[str, Any], catalog_timeout_seconds: float
+) -> dict[str, Any]:
     prompt = payload.get("prompt")
-    print(f"-----------------------------------------: {prompt}")
     if not isinstance(prompt, str) or not prompt.strip():
         return error_response(
             "INVALID_PROMPT",
             "El campo 'prompt' es requerido y debe ser un texto no vacio.",
         )
 
-    product = find_product(prompt)
-    if product is None:
+    quantity = parse_quantity(prompt)
+
+    try:
+        products = await search_catalog(nc, prompt, catalog_timeout_seconds)
+    except (TimeoutError, nats.errors.TimeoutError, OSError) as error:
+        print(f"AI AGENT CATALOG REQUEST FAILED: {error}")
         return error_response(
-            "PRODUCT_NOT_IDENTIFIED",
-            "No se pudo identificar un producto del catalogo simulado.",
+            "CATALOG_SERVICE_UNAVAILABLE",
+            "No fue posible consultar el catalogo de productos.",
         )
 
-    return success_response(product, parse_quantity(prompt))
+    if products is None:
+        return error_response(
+            "CATALOG_SERVICE_UNAVAILABLE",
+            "No fue posible consultar el catalogo de productos.",
+        )
+
+    if not products:
+        return error_response(
+            "PRODUCT_NOT_IDENTIFIED",
+            "No se pudo identificar un producto disponible en el catalogo.",
+        )
+
+    return success_response(products[0], quantity)
 
 
 def decode_payload(data: bytes) -> dict[str, Any] | None:
@@ -125,6 +137,9 @@ def decode_payload(data: bytes) -> dict[str, Any] | None:
 
     if not isinstance(message, dict):
         return None
+
+    if isinstance(message.get("response"), dict):
+        return message["response"]
 
     if isinstance(message.get("data"), dict):
         return message["data"]
@@ -142,6 +157,7 @@ async def main() -> None:
         if server.strip()
     ]
     queue = os.getenv("NATS_QUEUE", "ai-agent")
+    catalog_timeout_seconds = float(os.getenv("CATALOG_REQUEST_TIMEOUT_SECONDS", "3"))
 
     nc = await nats.connect(servers=nats_servers)
     stop_event = asyncio.Event()
@@ -156,7 +172,7 @@ async def main() -> None:
                 "El mensaje debe ser un objeto JSON valido.",
             )
         else:
-            response = interpret_intent(payload)
+            response = await interpret_intent(nc, payload, catalog_timeout_seconds)
 
         await message.respond(json.dumps(response).encode("utf-8"))
 

@@ -1,5 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import { NATS_SUBJECTS } from '../infrastructure/nats/nats.constants';
+import type { CatalogProductSearchRequestDto } from './application/dto/catalog-search.dto';
 import { ApproveQuoteDto } from './application/dto/approve-quote.dto';
 import { CreateQuoteDto } from './application/dto/create-quote.dto';
 import { ExecuteQuoteDto } from './application/dto/execute-quote.dto';
@@ -10,23 +12,28 @@ import { QuotesService } from './quotes.service';
 export class QuotesController {
   constructor(private readonly quotesService: QuotesService) {}
 
-  @MessagePattern('agent.quote.create')
+  @MessagePattern(NATS_SUBJECTS.QUOTE_CREATE)
   create(@Payload() payload: CreateQuoteDto) {
     return this.quotesService.create(payload);
   }
 
-  @MessagePattern('agent.quote.approve')
+  @MessagePattern(NATS_SUBJECTS.QUOTE_APPROVE)
   approve(@Payload() payload: ApproveQuoteDto) {
     return this.quotesService.approve(payload);
   }
 
-  @MessagePattern('agent.quote.reject')
+  @MessagePattern(NATS_SUBJECTS.QUOTE_REJECT)
   reject(@Payload() payload: RejectQuoteDto) {
     return this.quotesService.reject(payload);
   }
 
-  @MessagePattern('agent.quote.execute')
+  @MessagePattern(NATS_SUBJECTS.QUOTE_EXECUTE)
   execute(@Payload() payload: ExecuteQuoteDto) {
     return this.quotesService.execute(payload);
+  }
+
+  @MessagePattern(NATS_SUBJECTS.CATALOG_PRODUCTS_SEARCH)
+  searchCatalog(@Payload() payload: CatalogProductSearchRequestDto) {
+    return this.quotesService.searchCatalogProducts(payload);
   }
 }
