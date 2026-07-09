@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { validateEnvironment } from './config/env.validation';
-import { PrismaModule } from './infrastructure/prisma/prisma.module';
+import { DatabaseModule } from './infrastructure/typeorm/typeorm.module';
 import { QuotesModule } from './quotes/quotes.module';
 
 @Module({
@@ -13,7 +13,7 @@ import { QuotesModule } from './quotes/quotes.module';
       load: [configuration],
       validate: validateEnvironment,
     }),
-    PrismaModule,
+    DatabaseModule,
     QuotesModule,
   ],
 })

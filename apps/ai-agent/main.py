@@ -100,6 +100,7 @@ def find_product(prompt: str) -> Product | None:
 
 def interpret_intent(payload: dict[str, Any]) -> dict[str, Any]:
     prompt = payload.get("prompt")
+    print(f"-----------------------------------------: {prompt}")
     if not isinstance(prompt, str) or not prompt.strip():
         return error_response(
             "INVALID_PROMPT",
@@ -118,11 +119,17 @@ def interpret_intent(payload: dict[str, Any]) -> dict[str, Any]:
 
 def decode_payload(data: bytes) -> dict[str, Any] | None:
     try:
-        payload = json.loads(data.decode("utf-8"))
+        message = json.loads(data.decode("utf-8"))
     except json.JSONDecodeError:
         return None
 
-    return payload if isinstance(payload, dict) else None
+    if not isinstance(message, dict):
+        return None
+
+    if isinstance(message.get("data"), dict):
+        return message["data"]
+
+    return message
 
 
 async def main() -> None:
@@ -141,6 +148,7 @@ async def main() -> None:
 
     async def handle_message(message: Any) -> None:
         payload = decode_payload(message.data)
+        print (f"messageeeeeee '{message}'")
         if payload is None:
             response = error_response(
                 "INVALID_JSON",

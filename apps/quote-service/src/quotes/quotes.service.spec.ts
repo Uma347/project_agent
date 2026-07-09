@@ -1,11 +1,10 @@
 import { ConfigService } from '@nestjs/config';
-import { QuoteStatus } from '@prisma/client';
+import { DataSource, Repository } from 'typeorm';
+import { QuoteStatus } from './domain/quote.enums';
+import { Product } from './infrastructure/typeorm/product.entity';
+import { QuoteEvent } from './infrastructure/typeorm/quote-event.entity';
+import { Quote } from './infrastructure/typeorm/quote.entity';
 import { QuotesService } from './quotes.service';
-
-type TransactionMock = {
-  quote: { create: jest.Mock };
-  quoteEvent: { create: jest.Mock };
-};
 
 const product = {
   id: 'burger_classic',
@@ -32,8 +31,9 @@ describe('QuotesService', () => {
       }),
     };
     const eventCreate = jest
-      .fn<Promise<unknown>, [{ data: { eventType: string } }]>()
-      .mockResolvedValue({});
+      .fn<QuoteEvent, [Partial<QuoteEvent>]>()
+      .mockImplementation((payload) => payload as QuoteEvent);
+    const eventSave = jest.fn<Promise<QuoteEvent>, [QuoteEvent]>();
     const quoteCreate = jest.fn().mockResolvedValue({
       id: 'quote-id',
       productId: product.id,
@@ -51,19 +51,31 @@ describe('QuotesService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    const prisma = {
-      product: {
-        findUnique: jest.fn().mockResolvedValue(product),
-      },
-      $transaction: jest.fn((callback: (tx: TransactionMock) => unknown) =>
+    const quoteRepository = {
+      create: jest.fn((payload: Partial<Quote>) => payload as Quote),
+      save: quoteCreate,
+    };
+    const eventRepository = {
+      create: eventCreate,
+      save: eventSave,
+    };
+    const dataSource = {
+      transaction: jest.fn((callback: (manager: unknown) => unknown) =>
         callback({
-          quote: { create: quoteCreate },
-          quoteEvent: { create: eventCreate },
+          getRepository: jest.fn((entity: unknown) =>
+            entity === Quote ? quoteRepository : eventRepository,
+          ),
         }),
       ),
     };
+    const products = {
+      findOne: jest.fn().mockResolvedValue(product),
+    };
     const service = new QuotesService(
-      prisma as never,
+      dataSource as unknown as DataSource,
+      products as unknown as Repository<Product>,
+      {} as Repository<Quote>,
+      {} as Repository<QuoteEvent>,
       natsRequestClient as never,
       configService,
     );
@@ -78,13 +90,13 @@ describe('QuotesService', () => {
         prompt: 'quiero comprar dos hamburguesas',
       },
     );
-    expect(prisma.product.findUnique).toHaveBeenCalledWith({
+    expect(products.findOne).toHaveBeenCalledWith({
       where: { id: 'burger_classic' },
     });
     expect(response.status).toBe(QuoteStatus.PENDING_HUMAN_APPROVAL);
     expect(response.totalCents).toBe(2400);
     expect(eventCreate).toHaveBeenCalledTimes(1);
     const eventCreateCall = eventCreate.mock.calls[0]?.[0];
-    expect(eventCreateCall.data.eventType).toBe('QUOTE_CREATED');
+    expect(eventCreateCall.eventType).toBe('QUOTE_CREATED');
   });
 });
