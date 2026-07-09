@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateQuoteDto {
   @IsString()
@@ -7,4 +7,9 @@ export class CreateQuoteDto {
 
   @IsUUID()
   requestedByUserId!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quantity?: number;
 }
