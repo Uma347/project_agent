@@ -1,12 +1,11 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class RejectQuoteDto {
   @IsUUID()
   quoteId!: string;
 
-  @IsString()
-  @IsNotEmpty()
-  rejectedBy!: string;
+  @IsUUID()
+  rejectedByUserId!: string;
 
   @IsOptional()
   @IsString()

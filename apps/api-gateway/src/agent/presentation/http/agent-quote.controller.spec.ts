@@ -20,7 +20,10 @@ describe('AgentQuoteController', () => {
   });
 
   it('delegates quote creation', () => {
-    const payload = { prompt: 'quiero comprar dos hamburguesas' };
+    const payload = {
+      prompt: 'quiero comprar dos hamburguesas',
+      requestedByUserId: '11111111-1111-4111-8111-111111111111',
+    };
     create.mockReturnValue({ id: 'quote-id' });
 
     expect(controller.create(payload)).toEqual({ id: 'quote-id' });
@@ -28,7 +31,9 @@ describe('AgentQuoteController', () => {
   });
 
   it('delegates quote approval', () => {
-    const payload = { approvedBy: 'human-operator-1' };
+    const payload = {
+      approvedByUserId: '22222222-2222-4222-8222-222222222222',
+    };
     approve.mockReturnValue({ id: 'quote-id' });
 
     expect(controller.approve('quote-id', payload)).toEqual({ id: 'quote-id' });
@@ -36,7 +41,9 @@ describe('AgentQuoteController', () => {
   });
 
   it('delegates quote rejection', () => {
-    const payload = { rejectedBy: 'human-operator-1' };
+    const payload = {
+      rejectedByUserId: '33333333-3333-4333-8333-333333333333',
+    };
     reject.mockReturnValue({ id: 'quote-id' });
 
     expect(controller.reject('quote-id', payload)).toEqual({ id: 'quote-id' });

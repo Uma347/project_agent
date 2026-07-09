@@ -6,9 +6,13 @@ import { QuoteEvent } from './infrastructure/typeorm/quote-event.entity';
 import { Quote } from './infrastructure/typeorm/quote.entity';
 import { QuotesController } from './quotes.controller';
 import { QuotesService } from './quotes.service';
+import { User } from '../users/user.entity';
 
 @Module({
-  imports: [NatsModule, TypeOrmModule.forFeature([Product, Quote, QuoteEvent])],
+  imports: [
+    NatsModule,
+    TypeOrmModule.forFeature([Product, Quote, QuoteEvent, User]),
+  ],
   controllers: [QuotesController],
   providers: [QuotesService],
 })

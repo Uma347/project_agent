@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { QuoteStatus } from '../../domain/quote.enums';
+import { User } from '../../../users/user.entity';
 import { Product } from './product.entity';
 import { QuoteEvent } from './quote-event.entity';
 
@@ -35,6 +36,27 @@ export class Quote {
 
   @Column({ name: 'total_cents', type: 'integer' })
   totalCents!: number;
+
+  @Column({ name: 'requested_by_user_id', type: 'uuid', nullable: true })
+  requestedByUserId!: string | null;
+
+  @ManyToOne(() => User, (user) => user.requestedQuotes, { nullable: true })
+  @JoinColumn({ name: 'requested_by_user_id' })
+  requestedBy!: User | null;
+
+  @Column({ name: 'approved_by_user_id', type: 'uuid', nullable: true })
+  approvedByUserId!: string | null;
+
+  @ManyToOne(() => User, (user) => user.approvedQuotes, { nullable: true })
+  @JoinColumn({ name: 'approved_by_user_id' })
+  approvedBy!: User | null;
+
+  @Column({ name: 'rejected_by_user_id', type: 'uuid', nullable: true })
+  rejectedByUserId!: string | null;
+
+  @ManyToOne(() => User, (user) => user.rejectedQuotes, { nullable: true })
+  @JoinColumn({ name: 'rejected_by_user_id' })
+  rejectedBy!: User | null;
 
   @Column({
     type: 'enum',

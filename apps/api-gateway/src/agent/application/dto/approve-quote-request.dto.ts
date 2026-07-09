@@ -1,13 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class ApproveQuoteRequestDto {
   @ApiProperty({
-    example: 'human-operator-1',
+    example: '22222222-2222-4222-8222-222222222222',
   })
-  @IsString()
-  @IsNotEmpty()
-  approvedBy!: string;
+  @IsUUID()
+  approvedByUserId!: string;
 
   @ApiPropertyOptional({
     example: 'Aprobado desde Postman',

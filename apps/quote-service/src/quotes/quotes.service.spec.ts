@@ -1,10 +1,12 @@
 import { ConfigService } from '@nestjs/config';
 import { DataSource, Repository } from 'typeorm';
+import { UserInactiveError, UserNotFoundError } from './domain/quote.errors';
 import { QuoteStatus } from './domain/quote.enums';
 import { Product } from './infrastructure/typeorm/product.entity';
 import { QuoteEvent } from './infrastructure/typeorm/quote-event.entity';
 import { Quote } from './infrastructure/typeorm/quote.entity';
 import { QuotesService } from './quotes.service';
+import { User } from '../users/user.entity';
 
 const product = {
   id: 'burger_classic',
@@ -17,6 +19,16 @@ const product = {
   updatedAt: new Date(),
 };
 
+const user = {
+  id: '11111111-1111-4111-8111-111111111111',
+  firstName: 'Juan',
+  lastName: 'Perez',
+  email: 'juan.perez@example.com',
+  active: true,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+} as User;
+
 describe('QuotesService', () => {
   const configService = {
     getOrThrow: jest.fn().mockReturnValue(10),
@@ -26,12 +38,14 @@ describe('QuotesService', () => {
     dataSource: Partial<DataSource>;
     products?: Partial<Repository<Product>>;
     quotes?: Partial<Repository<Quote>>;
+    users?: Partial<Repository<User>>;
     natsRequestClient: { request: jest.Mock };
   }) {
     return new QuotesService(
       options.dataSource as DataSource,
       (options.products ?? {}) as Repository<Product>,
       (options.quotes ?? {}) as Repository<Quote>,
+      (options.users ?? {}) as Repository<User>,
       options.natsRequestClient as never,
       configService,
     );
@@ -56,6 +70,12 @@ describe('QuotesService', () => {
       quantity: 2,
       unitPriceCents: product.priceCents,
       totalCents: product.priceCents * 2,
+      requestedByUserId: user.id,
+      requestedBy: user,
+      approvedByUserId: null,
+      approvedBy: null,
+      rejectedByUserId: null,
+      rejectedBy: null,
       status: QuoteStatus.PENDING_HUMAN_APPROVAL,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       approvedAt: null,
@@ -86,14 +106,19 @@ describe('QuotesService', () => {
     const products = {
       findOne: jest.fn().mockResolvedValue(product),
     };
+    const users = {
+      findOne: jest.fn().mockResolvedValue(user),
+    };
     const service = createService({
       dataSource: dataSource as unknown as DataSource,
       products,
+      users,
       natsRequestClient,
     });
 
     const response = await service.create({
       prompt: 'quiero comprar dos hamburguesas',
+      requestedByUserId: user.id,
     });
 
     expect(natsRequestClient.request).toHaveBeenCalledWith(
@@ -105,11 +130,65 @@ describe('QuotesService', () => {
     expect(products.findOne).toHaveBeenCalledWith({
       where: { id: 'burger_classic' },
     });
+    expect(users.findOne).toHaveBeenCalledWith({
+      where: { id: user.id },
+    });
     expect(response.status).toBe(QuoteStatus.PENDING_HUMAN_APPROVAL);
     expect(response.totalCents).toBe(2400);
+    expect(response.requestedBy).toEqual({
+      id: user.id,
+      fullName: 'Juan Perez',
+      email: user.email,
+    });
     expect(eventCreate).toHaveBeenCalledTimes(1);
     const eventCreateCall = eventCreate.mock.calls[0]?.[0];
     expect(eventCreateCall.eventType).toBe('QUOTE_CREATED');
+    expect(eventCreateCall.metadata).toEqual(
+      expect.objectContaining({
+        userId: user.id,
+        userName: 'Juan Perez',
+        userEmail: user.email,
+      }),
+    );
+  });
+
+  it('rejects quote creation when the user does not exist', async () => {
+    const service = createService({
+      dataSource: {},
+      products: {},
+      users: {
+        findOne: jest.fn().mockResolvedValue(null),
+      },
+      natsRequestClient: { request: jest.fn() },
+    });
+
+    await expect(
+      service.create({
+        prompt: 'quiero comprar dos hamburguesas',
+        requestedByUserId: user.id,
+      }),
+    ).rejects.toBeInstanceOf(UserNotFoundError);
+  });
+
+  it('rejects quote creation when the user is inactive', async () => {
+    const service = createService({
+      dataSource: {},
+      products: {},
+      users: {
+        findOne: jest.fn().mockResolvedValue({
+          ...user,
+          active: false,
+        }),
+      },
+      natsRequestClient: { request: jest.fn() },
+    });
+
+    await expect(
+      service.create({
+        prompt: 'quiero comprar dos hamburguesas',
+        requestedByUserId: user.id,
+      }),
+    ).rejects.toBeInstanceOf(UserInactiveError);
   });
 
   it('executes an approved quote through the payment simulator', async () => {
@@ -131,6 +210,12 @@ describe('QuotesService', () => {
       quantity: 2,
       unitPriceCents: product.priceCents,
       totalCents: 2400,
+      requestedByUserId: user.id,
+      requestedBy: user,
+      approvedByUserId: user.id,
+      approvedBy: user,
+      rejectedByUserId: null,
+      rejectedBy: null,
       status: QuoteStatus.APPROVED_BY_HUMAN,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       approvedAt: new Date(),
@@ -148,6 +233,9 @@ describe('QuotesService', () => {
     const productRepository = {
       findOne: jest.fn().mockResolvedValue(product),
     };
+    const userRepository = {
+      findOne: jest.fn().mockResolvedValue(user),
+    };
     const eventRepository = {
       create: jest.fn((payload: Partial<QuoteEvent>) => payload as QuoteEvent),
       save: jest.fn(),
@@ -160,7 +248,9 @@ describe('QuotesService', () => {
               ? quoteRepository
               : entity === Product
                 ? productRepository
-                : eventRepository,
+                : entity === User
+                  ? userRepository
+                  : eventRepository,
           ),
         }),
       ),
@@ -194,6 +284,9 @@ describe('QuotesService', () => {
     expect(productRepository.findOne).toHaveBeenCalledWith({
       where: { id: 'burger_classic' },
     });
+    expect(userRepository.findOne).toHaveBeenCalledWith({
+      where: { id: user.id },
+    });
     expect(response.status).toBe(QuoteStatus.EXECUTED);
     expect(response.executionResult).toEqual(paymentResponse);
     expect(eventRepository.create).toHaveBeenCalledWith(
@@ -215,6 +308,12 @@ describe('QuotesService', () => {
       quantity: 2,
       unitPriceCents: product.priceCents,
       totalCents: 2400,
+      requestedByUserId: user.id,
+      requestedBy: user,
+      approvedByUserId: user.id,
+      approvedBy: user,
+      rejectedByUserId: null,
+      rejectedBy: null,
       status: QuoteStatus.EXECUTED,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       approvedAt: new Date(),
@@ -231,11 +330,18 @@ describe('QuotesService', () => {
     const productRepository = {
       findOne: jest.fn().mockResolvedValue(product),
     };
+    const userRepository = {
+      findOne: jest.fn().mockResolvedValue(user),
+    };
     const dataSource = {
       transaction: jest.fn((callback: (manager: unknown) => unknown) =>
         callback({
           getRepository: jest.fn((entity: unknown) =>
-            entity === Quote ? quoteRepository : productRepository,
+            entity === Quote
+              ? quoteRepository
+              : entity === Product
+                ? productRepository
+                : userRepository,
           ),
         }),
       ),

@@ -57,6 +57,19 @@ Servicios expuestos:
 El contenedor `quote-service` usa TypeORM para crear el esquema y sembrar el
 catalogo simulado al iniciar.
 
+Usuarios de dominio sembrados:
+
+| Nombre | Email | UUID |
+| --- | --- | --- |
+| Juan Perez | `juan.perez@example.com` | `11111111-1111-4111-8111-111111111111` |
+| Maria Lopez | `maria.lopez@example.com` | `22222222-2222-4222-8222-222222222222` |
+| Carlos Rojas | `carlos.rojas@example.com` | `33333333-3333-4333-8333-333333333333` |
+| Ana Fernandez | `ana.fernandez@example.com` | `44444444-4444-4444-8444-444444444444` |
+| Pedro Gomez | `pedro.gomez@example.com` | `55555555-5555-4555-8555-555555555555` |
+
+No hay autenticacion ni login; estos usuarios solo extienden el modelo de
+dominio.
+
 Para apagar:
 
 ```bash
@@ -78,7 +91,8 @@ POST http://localhost:3000/api/agent/quote
 Content-Type: application/json
 
 {
-  "prompt": "quiero comprar dos hamburguesas"
+  "prompt": "quiero comprar dos hamburguesas",
+  "requestedByUserId": "11111111-1111-4111-8111-111111111111"
 }
 ```
 
@@ -89,7 +103,7 @@ POST http://localhost:3000/api/agent/quote/{quote_id}/approve
 Content-Type: application/json
 
 {
-  "approvedBy": "human-operator-1"
+  "approvedByUserId": "22222222-2222-4222-8222-222222222222"
 }
 ```
 
@@ -133,7 +147,7 @@ POST http://localhost:3000/api/agent/quote/{quote_id}/reject
 Content-Type: application/json
 
 {
-  "rejectedBy": "human-operator-1",
+  "rejectedByUserId": "33333333-3333-4333-8333-333333333333",
   "reason": "Cliente no confirmo la compra"
 }
 ```

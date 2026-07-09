@@ -7,11 +7,17 @@ import { ApproveQuoteDto } from './application/dto/approve-quote.dto';
 import { CreateQuoteDto } from './application/dto/create-quote.dto';
 import { ExecuteQuoteDto } from './application/dto/execute-quote.dto';
 import { RejectQuoteDto } from './application/dto/reject-quote.dto';
-import { QuoteDomainError } from './domain/quote.errors';
+import {
+  QuoteDomainError,
+  QuoteNotFoundError,
+  UserInactiveError,
+  UserNotFoundError,
+} from './domain/quote.errors';
 import { QuoteEventType, QuoteStatus } from './domain/quote.enums';
 import { Product } from './infrastructure/typeorm/product.entity';
 import { QuoteEvent } from './infrastructure/typeorm/quote-event.entity';
 import { Quote } from './infrastructure/typeorm/quote.entity';
+import { User } from '../users/user.entity';
 
 type IntentInterpretationResponse = {
   productId?: string;
@@ -48,6 +54,8 @@ export class QuotesService {
     private readonly products: Repository<Product>,
     @InjectRepository(Quote)
     private readonly quotes: Repository<Quote>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
     private readonly natsRequestClient: NatsRequestClient,
     configService: ConfigService,
   ) {
@@ -57,6 +65,9 @@ export class QuotesService {
   }
 
   async create(payload: CreateQuoteDto) {
+    const requestedBy = await this.findActiveUserOrThrow(
+      payload.requestedByUserId,
+    );
     const interpretation =
       await this.natsRequestClient.request<IntentInterpretationResponse>(
         'ai.intent.interpret',
@@ -104,6 +115,8 @@ export class QuotesService {
           quantity,
           unitPriceCents,
           totalCents,
+          requestedByUserId: requestedBy.id,
+          requestedBy,
           status: QuoteStatus.PENDING_HUMAN_APPROVAL,
           expiresAt,
         }),
@@ -114,13 +127,13 @@ export class QuotesService {
         createdQuote.id,
         QuoteEventType.QUOTE_CREATED,
         {
-          requestedBy: payload.requestedBy,
           prompt: payload.prompt,
           interpretationReason: interpretation.reason,
           productId: product.id,
           quantity,
           unitPriceCents,
           totalCents,
+          ...this.toUserAuditMetadata(requestedBy),
         },
       );
 
@@ -131,6 +144,9 @@ export class QuotesService {
   }
 
   async approve(payload: ApproveQuoteDto) {
+    const approvedBy = await this.findActiveUserOrThrow(
+      payload.approvedByUserId,
+    );
     const quote = await this.findQuoteOrThrow(payload.quoteId);
     this.ensureNotExpired(quote);
 
@@ -149,6 +165,8 @@ export class QuotesService {
     const updatedQuote = await this.dataSource.transaction(async (manager) => {
       quote.status = QuoteStatus.APPROVED_BY_HUMAN;
       quote.approvedAt = new Date();
+      quote.approvedByUserId = approvedBy.id;
+      quote.approvedBy = approvedBy;
       const approvedQuote = await manager.getRepository(Quote).save(quote);
 
       await this.recordEvent(
@@ -156,8 +174,8 @@ export class QuotesService {
         approvedQuote.id,
         QuoteEventType.APPROVED_BY_HUMAN,
         {
-          approvedBy: payload.approvedBy,
           note: payload.note,
+          ...this.toUserAuditMetadata(approvedBy),
         },
       );
 
@@ -168,6 +186,9 @@ export class QuotesService {
   }
 
   async reject(payload: RejectQuoteDto) {
+    const rejectedBy = await this.findActiveUserOrThrow(
+      payload.rejectedByUserId,
+    );
     const quote = await this.findQuoteOrThrow(payload.quoteId);
 
     if (quote.status === QuoteStatus.EXECUTED) {
@@ -181,6 +202,8 @@ export class QuotesService {
     const updatedQuote = await this.dataSource.transaction(async (manager) => {
       quote.status = QuoteStatus.REJECTED;
       quote.rejectedAt = new Date();
+      quote.rejectedByUserId = rejectedBy.id;
+      quote.rejectedBy = rejectedBy;
       const rejectedQuote = await manager.getRepository(Quote).save(quote);
 
       await this.recordEvent(
@@ -188,8 +211,8 @@ export class QuotesService {
         rejectedQuote.id,
         QuoteEventType.REJECTED,
         {
-          rejectedBy: payload.rejectedBy,
           reason: payload.reason,
+          ...this.toUserAuditMetadata(rejectedBy),
         },
       );
 
@@ -207,11 +230,11 @@ export class QuotesService {
       });
 
       if (!currentQuote) {
-        throw new QuoteDomainError('Quote was not found.');
+        throw new QuoteNotFoundError();
       }
 
       if (currentQuote.status === QuoteStatus.EXECUTED) {
-        return this.loadQuoteProduct(manager, currentQuote);
+        return this.loadQuoteRelations(manager, currentQuote);
       }
 
       this.ensureNotExpired(currentQuote);
@@ -232,7 +255,7 @@ export class QuotesService {
       const executedQuote = await manager
         .getRepository(Quote)
         .save(currentQuote);
-      await this.loadQuoteProduct(manager, executedQuote);
+      await this.loadQuoteRelations(manager, executedQuote);
 
       await this.recordEvent(
         manager,
@@ -294,14 +317,72 @@ export class QuotesService {
     return quote;
   }
 
+  private async loadQuoteRelations(
+    manager: EntityManager,
+    quote: Quote,
+  ): Promise<Quote> {
+    await this.loadQuoteProduct(manager, quote);
+
+    const userRepository = manager.getRepository(User);
+    const userIds = [
+      quote.requestedByUserId,
+      quote.approvedByUserId,
+      quote.rejectedByUserId,
+    ].filter((userId): userId is string => Boolean(userId));
+
+    const users = await Promise.all(
+      userIds.map((userId) =>
+        userRepository.findOne({ where: { id: userId } }),
+      ),
+    );
+    const userById = new Map(
+      users
+        .filter((user): user is User => Boolean(user))
+        .map((user) => [user.id, user]),
+    );
+
+    quote.requestedBy = quote.requestedByUserId
+      ? (userById.get(quote.requestedByUserId) ?? null)
+      : null;
+    quote.approvedBy = quote.approvedByUserId
+      ? (userById.get(quote.approvedByUserId) ?? null)
+      : null;
+    quote.rejectedBy = quote.rejectedByUserId
+      ? (userById.get(quote.rejectedByUserId) ?? null)
+      : null;
+
+    return quote;
+  }
+
+  private async findActiveUserOrThrow(userId: string): Promise<User> {
+    const user = await this.users.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UserNotFoundError();
+    }
+
+    if (!user.active) {
+      throw new UserInactiveError();
+    }
+
+    return user;
+  }
+
   private async findQuoteOrThrow(quoteId: string) {
     const quote = await this.quotes.findOne({
       where: { id: quoteId },
-      relations: { product: true },
+      relations: {
+        product: true,
+        requestedBy: true,
+        approvedBy: true,
+        rejectedBy: true,
+      },
     });
 
     if (!quote) {
-      throw new QuoteDomainError('Quote was not found.');
+      throw new QuoteNotFoundError();
     }
 
     return quote;
@@ -346,6 +427,15 @@ export class QuotesService {
       quantity: quote.quantity,
       unitPriceCents: quote.unitPriceCents,
       totalCents: quote.totalCents,
+      requestedBy: quote.requestedBy
+        ? this.toUserResponse(quote.requestedBy)
+        : undefined,
+      approvedBy: quote.approvedBy
+        ? this.toUserResponse(quote.approvedBy)
+        : undefined,
+      rejectedBy: quote.rejectedBy
+        ? this.toUserResponse(quote.rejectedBy)
+        : undefined,
       expiresAt: quote.expiresAt,
       approvedAt: quote.approvedAt,
       rejectedAt: quote.rejectedAt,
@@ -355,5 +445,25 @@ export class QuotesService {
       createdAt: quote.createdAt,
       updatedAt: quote.updatedAt,
     };
+  }
+
+  private toUserAuditMetadata(user: User) {
+    return {
+      userId: user.id,
+      userName: this.toUserFullName(user),
+      userEmail: user.email,
+    };
+  }
+
+  private toUserResponse(user: User) {
+    return {
+      id: user.id,
+      fullName: this.toUserFullName(user),
+      email: user.email,
+    };
+  }
+
+  private toUserFullName(user: User): string {
+    return `${user.firstName} ${user.lastName}`;
   }
 }
