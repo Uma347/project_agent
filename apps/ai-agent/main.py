@@ -148,7 +148,8 @@ async def main() -> None:
 
     async def handle_message(message: Any) -> None:
         payload = decode_payload(message.data)
-        print (f"messageeeeeee '{message}'")
+        print(f"AI AGENT RAW DATA: {message.data.decode('utf-8')}")
+        print(f"AI AGENT PAYLOAD: {payload}")
         if payload is None:
             response = error_response(
                 "INVALID_JSON",

@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomUUID } from 'crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { NatsRequestClient } from '../infrastructure/nats/nats-request.client';
 import { ApproveQuoteDto } from './application/dto/approve-quote.dto';
@@ -24,6 +23,21 @@ type IntentInterpretationResponse = {
   };
 };
 
+type PaymentSimulationResponse = {
+  purchaseId?: string;
+  status?: string;
+  provider?: string;
+  quoteId?: string;
+  amountCents?: number;
+  currency?: string;
+  executedAt?: string;
+  message?: string;
+  error?: {
+    code: string;
+    message: string;
+  };
+};
+
 @Injectable()
 export class QuotesService {
   private readonly expirationMinutes: number;
@@ -34,8 +48,6 @@ export class QuotesService {
     private readonly products: Repository<Product>,
     @InjectRepository(Quote)
     private readonly quotes: Repository<Quote>,
-    @InjectRepository(QuoteEvent)
-    private readonly quoteEvents: Repository<QuoteEvent>,
     private readonly natsRequestClient: NatsRequestClient,
     configService: ConfigService,
   ) {
@@ -130,19 +142,19 @@ export class QuotesService {
       throw new QuoteDomainError('Executed quotes cannot be approved.');
     }
 
-    if (quote.status === QuoteStatus.APPROVED) {
+    if (quote.status === QuoteStatus.APPROVED_BY_HUMAN) {
       return this.toResponse(quote);
     }
 
     const updatedQuote = await this.dataSource.transaction(async (manager) => {
-      quote.status = QuoteStatus.APPROVED;
+      quote.status = QuoteStatus.APPROVED_BY_HUMAN;
       quote.approvedAt = new Date();
       const approvedQuote = await manager.getRepository(Quote).save(quote);
 
       await this.recordEvent(
         manager,
         approvedQuote.id,
-        QuoteEventType.APPROVED,
+        QuoteEventType.APPROVED_BY_HUMAN,
         {
           approvedBy: payload.approvedBy,
           note: payload.note,
@@ -188,65 +200,44 @@ export class QuotesService {
   }
 
   async execute(payload: ExecuteQuoteDto) {
-    const quote = await this.findQuoteOrThrow(payload.quoteId);
-
-    if (quote.status === QuoteStatus.EXECUTED) {
-      await this.quoteEvents.save(
-        this.quoteEvents.create({
-          quoteId: quote.id,
-          eventType: QuoteEventType.EXECUTION_REPLAYED,
-          metadata: {
-            executedBy: payload.executedBy,
-            executionResult: quote.executionResult ?? undefined,
-          },
-        }),
-      );
-
-      return this.toResponse(quote);
-    }
-
-    this.ensureNotExpired(quote);
-
-    if (quote.status !== QuoteStatus.APPROVED) {
-      throw new QuoteDomainError(
-        'Quote can only be executed after human approval.',
-      );
-    }
-
-    const executionId = randomUUID();
-    const executionResult = {
-      executionId,
-      status: 'SIMULATED_PURCHASE_EXECUTED',
-      executedAt: new Date().toISOString(),
-    };
-
     const updatedQuote = await this.dataSource.transaction(async (manager) => {
       const currentQuote = await manager.getRepository(Quote).findOne({
         where: { id: payload.quoteId },
-        relations: { product: true },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!currentQuote) {
         throw new QuoteDomainError('Quote was not found.');
       }
 
-      if (currentQuote.status !== QuoteStatus.APPROVED) {
-        return currentQuote;
+      if (currentQuote.status === QuoteStatus.EXECUTED) {
+        return this.loadQuoteProduct(manager, currentQuote);
       }
+
+      this.ensureNotExpired(currentQuote);
+
+      if (currentQuote.status !== QuoteStatus.APPROVED_BY_HUMAN) {
+        throw new QuoteDomainError(
+          'Quote can only be executed after human approval.',
+        );
+      }
+
+      const executionResult = await this.executeSimulatedPayment(currentQuote);
 
       currentQuote.status = QuoteStatus.EXECUTED;
       currentQuote.executedAt = new Date();
-      currentQuote.executionId = executionId;
+      currentQuote.executionId = currentQuote.id;
       currentQuote.executionResult = executionResult;
 
       const executedQuote = await manager
         .getRepository(Quote)
         .save(currentQuote);
+      await this.loadQuoteProduct(manager, executedQuote);
 
       await this.recordEvent(
         manager,
         executedQuote.id,
-        QuoteEventType.EXECUTED,
+        QuoteEventType.QUOTE_EXECUTED,
         {
           executedBy: payload.executedBy,
           executionResult,
@@ -257,6 +248,50 @@ export class QuotesService {
     });
 
     return this.toResponse(updatedQuote);
+  }
+
+  private async executeSimulatedPayment(
+    quote: Quote,
+  ): Promise<Record<string, unknown>> {
+    const response =
+      await this.natsRequestClient.request<PaymentSimulationResponse>(
+        'payment.simulate.execute',
+        {
+          quoteId: quote.id,
+          amountCents: quote.totalCents,
+          currency: 'BOB',
+          idempotencyKey: quote.id,
+        },
+      );
+
+    if (response.error) {
+      throw new QuoteDomainError(
+        `Payment simulator rejected the request: ${response.error.message}`,
+      );
+    }
+
+    if (!response.purchaseId || response.status !== 'SIMULATED_SUCCESS') {
+      throw new QuoteDomainError(
+        'Payment simulator returned an invalid response.',
+      );
+    }
+
+    return response as Record<string, unknown>;
+  }
+
+  private async loadQuoteProduct(
+    manager: EntityManager,
+    quote: Quote,
+  ): Promise<Quote> {
+    const product = await manager.getRepository(Product).findOne({
+      where: { id: quote.productId },
+    });
+
+    if (product) {
+      quote.product = product;
+    }
+
+    return quote;
   }
 
   private async findQuoteOrThrow(quoteId: string) {

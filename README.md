@@ -3,7 +3,8 @@
 Flujo de compra asistido por IA con aprobacion humana obligatoria. El usuario
 envia una intencion de compra por HTTP, el gateway la publica por NATS,
 `quote-service` consulta al `ai-agent`, crea una cotizacion y solo permite
-ejecutarla si fue aprobada por una persona.
+ejecutarla si fue aprobada por una persona. Al ejecutar, `quote-service`
+solicita una compra simulada al `payment-simulator`; no se mueve dinero real.
 
 ## Arquitectura
 
@@ -16,9 +17,9 @@ API Gateway (NestJS)
         | HTTP -> NATS Request/Reply
         v
 NATS
-  |--------------------------|
-  v                          v
-Quote Service (NestJS)    AI Agent (Python)
+  |--------------------------|-------------------------------|
+  v                          v                               v
+Quote Service (NestJS)    AI Agent (Python)    Payment Simulator (Python)
   |
   v
 PostgreSQL
@@ -29,6 +30,8 @@ PostgreSQL
 - `apps/api-gateway`: API REST para Postman. No contiene logica de negocio.
 - `apps/quote-service`: reglas de negocio de cotizaciones y persistencia.
 - `apps/ai-agent`: interpreta intenciones de compra con catalogo simulado.
+- `apps/payment-simulator`: simula la ejecucion de compra/pago por NATS,
+  sin base de datos y sin mover dinero real.
 - `infra/docker-compose.yml`: levanta todo el stack.
 
 ## Requisitos
@@ -49,15 +52,10 @@ Servicios expuestos:
 - API Gateway: `http://localhost:3000`
 - Swagger: `http://localhost:3000/docs`
 - NATS monitor: `http://localhost:8222`
-- PostgreSQL: `localhost:5432`
+- PostgreSQL: `localhost:5433`
 
-El contenedor `quote-service` ejecuta automaticamente:
-
-```bash
-npx prisma migrate deploy
-npm run prisma:seed
-node dist/main.js
-```
+El contenedor `quote-service` usa TypeORM para crear el esquema y sembrar el
+catalogo simulado al iniciar.
 
 Para apagar:
 
@@ -106,6 +104,28 @@ Content-Type: application/json
 }
 ```
 
+Durante la ejecucion, `quote-service` publica un Request/Reply NATS a:
+
+```text
+payment.simulate.execute
+```
+
+con:
+
+```json
+{
+  "quoteId": "uuid",
+  "amountCents": 5000,
+  "currency": "BOB",
+  "idempotencyKey": "uuid"
+}
+```
+
+`payment-simulator` responde una compra simulada con estado
+`SIMULATED_SUCCESS`. La idempotencia principal queda en `quote-service`: si una
+cotizacion ya esta `EXECUTED`, devuelve el mismo resultado guardado sin volver
+a llamar al simulador.
+
 Rechazar cotizacion:
 
 ```http
@@ -153,8 +173,6 @@ Quote Service:
 ```bash
 cd apps/quote-service
 npm install
-npx prisma migrate dev
-npm run prisma:seed
 npm run start:dev
 ```
 
@@ -162,6 +180,16 @@ AI Agent:
 
 ```bash
 cd apps/ai-agent
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+```
+
+Payment Simulator:
+
+```bash
+cd apps/payment-simulator
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt

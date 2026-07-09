@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qhantuy}
       POSTGRES_DB: ${POSTGRES_DB:-qhantuy_quotes}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -35,6 +35,17 @@ services:
     depends_on:
       - nats
 
+  payment-simulator:
+    build:
+      context: ../apps/payment-simulator
+      dockerfile: Dockerfile
+    container_name: qhantuy-payment-simulator
+    environment:
+      NATS_SERVERS: nats://nats:4222
+      NATS_QUEUE: payment-simulator
+    depends_on:
+      - nats
+
   quote-service:
     build:
       context: ../apps/quote-service
@@ -53,6 +64,8 @@ services:
       nats:
         condition: service_started
       ai-agent:
+        condition: service_started
+      payment-simulator:
         condition: service_started
 
   api-gateway:
