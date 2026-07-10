@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qhantuy}
       POSTGRES_DB: ${POSTGRES_DB:-qhantuy_quotes}
     ports:
-      - "5434:5432"
+      - "${POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,8 +21,8 @@ services:
     container_name: qhantuy-nats
     command: ["-js"]
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "${NATS_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
 
   ai-agent:
     build:
@@ -75,7 +75,7 @@ services:
     container_name: qhantuy-api-gateway
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: ${PORT:-3000}
       API_GLOBAL_PREFIX: api
       SWAGGER_TITLE: Qhantuy API Gateway
       SWAGGER_DESCRIPTION: HTTP REST API Gateway for Qhantuy microservices.
@@ -84,7 +84,7 @@ services:
       NATS_SERVERS: nats://nats:4222
       NATS_REQUEST_TIMEOUT_MS: 5000
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     depends_on:
       nats:
         condition: service_started
