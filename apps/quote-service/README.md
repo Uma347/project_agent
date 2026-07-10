@@ -1,98 +1,156 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Quote Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Servicio NestJS responsable de la logica de negocio de cotizaciones. No expone
+endpoints HTTP: consume mensajes NATS Request/Reply y persiste estado en
+PostgreSQL usando TypeORM. Tambien es la fuente de verdad del catalogo de
+productos que usa el agente para interpretar intenciones.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Subjects NATS
 
-## Description
+| Subject | Payload minimo | Descripcion |
+| --- | --- | --- |
+| `agent.quote.create` | `{ "prompt": "quiero comprar mochilas urbanas", "requestedByUserId": "uuid", "quantity": 2 }` | Interpreta la intencion con `ai-agent` y crea una cotizacion en `PENDING_HUMAN_APPROVAL`. `quantity` es opcional y tiene prioridad sobre la cantidad interpretada. |
+| `agent.quote.approve` | `{ "quoteId": "uuid", "approvedByUserId": "uuid" }` | Aprueba una cotizacion vigente. |
+| `agent.quote.reject` | `{ "quoteId": "uuid", "rejectedByUserId": "uuid" }` | Rechaza una cotizacion. |
+| `agent.quote.execute` | `{ "quoteId": "uuid" }` | Ejecuta una compra simulada en `payment-simulator` solo si fue aprobada. |
+| `catalog.products.search` | `{ "query": "quiero tres mochilas", "limit": 5 }` | Busca productos activos del catalogo por intencion. |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Reglas implementadas
 
-## Project setup
+- Toda cotizacion nueva queda en `PENDING_HUMAN_APPROVAL`.
+- La creacion, aprobacion y rechazo requieren un usuario activo del dominio.
+- La creacion llama por Request/Reply a `ai.intent.interpret`.
+- El agente no tiene catalogo propio: llama a `catalog.products.search`.
+- El catalogo se busca por `name`, `description`, `category`, `keywords` y
+  `tags`, sin sensibilidad a mayusculas/minusculas.
+- Si `agent.quote.create` recibe `quantity`, esa cantidad se usa para calcular
+  el total. Si no la recibe, se usa la cantidad interpretada por el agente.
+- La expiracion se calcula con `QUOTE_EXPIRATION_MINUTES`, por defecto 10.
+- Una cotizacion expirada no puede aprobarse ni ejecutarse.
+- La ejecucion solo ocurre si la cotizacion fue aprobada por un humano.
+- La ejecucion llama por Request/Reply a `payment.simulate.execute`.
+- La ejecucion es idempotente en `quote-service`: llamadas repetidas devuelven
+  el mismo resultado guardado sin volver a llamar al simulador.
+- Cada accion registra un evento en `quote_events`.
+- Los eventos guardan `userId`, `userName` y `userEmail` en `metadata` para
+  auditoria.
 
-```bash
-$ npm install
+## Estructura
+
+```text
+src/
+|-- config/
+|-- infrastructure/
+|   |-- nats/
+|   `-- typeorm/
+|-- quotes/
+|   |-- application/
+|   |   `-- dto/
+|   |-- domain/
+|   |-- quotes.controller.ts
+|   |-- quotes.module.ts
+|   `-- quotes.service.ts
+|-- app.module.ts
+`-- main.ts
 ```
 
-## Compile and run the project
+## Base de datos
 
-```bash
-# development
-$ npm run start
+Entidades TypeORM:
 
-# watch mode
-$ npm run start:dev
+- `Product`
+- `User`
+- `Quote`
+- `QuoteEvent`
 
-# production mode
-$ npm run start:prod
+El esquema se crea desde las entidades TypeORM. El catalogo inicial y los
+usuarios de dominio se siembran al iniciar el servicio.
+
+La entidad `Product` incluye campos para busqueda por intencion:
+
+- `category text null`
+- `keywords text[] not null default '{}'`
+- `tags text[] not null default '{}'`
+- `metadata jsonb null`
+
+Existe una migracion TypeORM para agregar estos campos en:
+
+```text
+src/infrastructure/typeorm/migrations/1720000000000-AddIntentSearchFieldsToProducts.ts
 ```
 
-## Run tests
+Productos iniciales:
 
-```bash
-# unit tests
-$ npm run test
+| ID | SKU | Nombre | Categoria | Tags |
+| --- | --- | --- | --- | --- |
+| `0e2b0f7f-6f5f-4b35-a0d8-1e42dd90791f` | `MOCHILA-URBANA` | Mochila urbana | `backpack` | `urbano`, `estudio`, `trabajo`, `viaje corto` |
+| `24e44649-8b2d-42b5-bcfd-46d4f4e4f7a8` | `MOCHILA-VIAJE` | Mochila de viaje | `backpack` | `viaje`, `grande`, `organizador` |
+| `8f8e2095-7c5b-4b5b-9ea0-c37f8fd5cc64` | `CARTERA-CUERO` | Cartera de cuero | `handbag` | `moda`, `elegante`, `diario` |
+| `d6a3868d-f4ac-4bf8-b295-573037f08811` | `BILLETERA-COMPACTA` | Billetera compacta | `wallet` | `compacto`, `tarjetas`, `accesorio` |
+| `62be4a2a-0df9-4422-92f6-0a6d3d8e17d4` | `LONCHERA-TERMICA` | Lonchera termica | `lunchbag` | `colegio`, `oficina`, `alimentos` |
+| `75b5e2ad-3d99-4f3f-a817-c1a6e5a1f1bb` | `CARTUCHERA-ESCOLAR` | Cartuchera escolar | `pencil_case` | `colegio`, `utiles`, `organizador` |
+| `a7f88841-c6c6-4e68-8848-0da368b64d7a` | `MORRAL-CROSSBODY` | Morral crossbody | `crossbody` | `urbano`, `liviano`, `diario` |
+| `ca56771b-04a7-47d4-9f47-f1577d97682e` | `MALETA-CABINA` | Maleta de cabina | `luggage` | `viaje`, `ruedas`, `cabina` |
 
-# e2e tests
-$ npm run test:e2e
+Ejemplo de respuesta de `catalog.products.search`:
 
-# test coverage
-$ npm run test:cov
+```json
+{
+  "products": [
+    {
+      "productId": "0e2b0f7f-6f5f-4b35-a0d8-1e42dd90791f",
+      "sku": "MOCHILA-URBANA",
+      "name": "Mochila urbana",
+      "description": "Mochila resistente para uso diario, trabajo o universidad.",
+      "category": "backpack",
+      "keywords": ["mochila", "mochilas", "morral", "bolso escolar", "backpack"],
+      "tags": ["urbano", "estudio", "trabajo", "viaje corto"],
+      "priceCents": 28900
+    }
+  ]
+}
 ```
 
-## Deployment
+Usuarios iniciales:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+| Nombre | Email | UUID |
+| --- | --- | --- |
+| Juan Perez | `juan.perez@example.com` | `b6fd7d2d-5e56-4b37-a761-2d69b86a9e91` |
+| Maria Lopez | `maria.lopez@example.com` | `9cc1fe5e-8b25-4e3d-908e-d9aa0d8f51f2` |
+| Carlos Rojas | `carlos.rojas@example.com` | `47ad93a6-44fa-494c-88cc-7a865639e2d0` |
+| Ana Fernandez | `ana.fernandez@example.com` | `f2c41e10-a105-4c09-9bc8-e7980799d21e` |
+| Pedro Gomez | `pedro.gomez@example.com` | `6c77170e-87ad-4f49-9848-c618b06030f7` |
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Variables de entorno
+
+Ver `.env.example`.
+
+| Variable | Descripcion |
+| --- | --- |
+| `DATABASE_URL` | Conexion PostgreSQL usada por TypeORM. |
+| `NATS_SERVERS` | Lista separada por comas de servidores NATS. |
+| `NATS_QUEUE` | Queue group del servicio. |
+| `NATS_REQUEST_TIMEOUT_MS` | Timeout para requests NATS hacia otros servicios. |
+| `QUOTE_EXPIRATION_MINUTES` | Minutos de vigencia de una cotizacion. |
+
+## Ejecucion local
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm install
+npm run start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Comandos
 
-## Resources
+```bash
+npm run build
+npm run lint
+npm run test
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Docker
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```bash
+docker build -t qhantuy-quote-service .
+docker run --rm --env-file .env qhantuy-quote-service
+```

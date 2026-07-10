@@ -1,16 +1,95 @@
 services:
   postgres:
     image: postgres:16
+    container_name: qhantuy-postgres
     environment:
-      POSTGRES_USER: qhantuy
-      POSTGRES_PASSWORD: qhantuy
-      POSTGRES_DB: qhantuy_quotes
+      POSTGRES_USER: ${POSTGRES_USER:-qhantuy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qhantuy}
+      POSTGRES_DB: ${POSTGRES_DB:-qhantuy_quotes}
     ports:
-      - "5432:5432"
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   nats:
     image: nats:2.10
+    container_name: qhantuy-nats
     command: ["-js"]
     ports:
       - "4222:4222"
       - "8222:8222"
+
+  ai-agent:
+    build:
+      context: ../apps/ai-agent
+      dockerfile: Dockerfile
+    container_name: qhantuy-ai-agent
+    environment:
+      NATS_SERVERS: nats://nats:4222
+      NATS_QUEUE: ai-agent
+    depends_on:
+      - nats
+
+  payment-simulator:
+    build:
+      context: ../apps/payment-simulator
+      dockerfile: Dockerfile
+    container_name: qhantuy-payment-simulator
+    environment:
+      NATS_SERVERS: nats://nats:4222
+      NATS_QUEUE: payment-simulator
+    depends_on:
+      - nats
+
+  quote-service:
+    build:
+      context: ../apps/quote-service
+      dockerfile: Dockerfile
+    container_name: qhantuy-quote-service
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-qhantuy}:${POSTGRES_PASSWORD:-qhantuy}@postgres:5432/${POSTGRES_DB:-qhantuy_quotes}?schema=public
+      NATS_SERVERS: nats://nats:4222
+      NATS_QUEUE: quote-service
+      NATS_REQUEST_TIMEOUT_MS: 5000
+      QUOTE_EXPIRATION_MINUTES: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      ai-agent:
+        condition: service_started
+      payment-simulator:
+        condition: service_started
+
+  api-gateway:
+    build:
+      context: ../apps/api-gateway
+      dockerfile: Dockerfile
+    container_name: qhantuy-api-gateway
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_GLOBAL_PREFIX: api
+      SWAGGER_TITLE: Qhantuy API Gateway
+      SWAGGER_DESCRIPTION: HTTP REST API Gateway for Qhantuy microservices.
+      SWAGGER_VERSION: 1.0.0
+      SWAGGER_PATH: docs
+      NATS_SERVERS: nats://nats:4222
+      NATS_REQUEST_TIMEOUT_MS: 5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      nats:
+        condition: service_started
+      quote-service:
+        condition: service_started
+
+volumes:
+  postgres_data:
