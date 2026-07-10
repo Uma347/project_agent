@@ -72,15 +72,15 @@ Crear cotizacion desde una intencion:
 ```bash
 curl -X POST http://localhost:3000/api/agent/quote \
   -H "Content-Type: application/json" \
-  -d "{\"prompt\":\"quiero comprar hamburguesas\",\"requestedByUserId\":\"11111111-1111-4111-8111-111111111111\",\"quantity\":3}"
+  -d "{\"prompt\":\"quiero comprar mochilas urbanas\",\"requestedByUserId\":\"b6fd7d2d-5e56-4b37-a761-2d69b86a9e91\",\"quantity\":3}"
 ```
 
 Body:
 
 ```json
 {
-  "prompt": "quiero comprar hamburguesas",
-  "requestedByUserId": "11111111-1111-4111-8111-111111111111",
+  "prompt": "quiero comprar mochilas urbanas",
+  "requestedByUserId": "b6fd7d2d-5e56-4b37-a761-2d69b86a9e91",
   "quantity": 3
 }
 ```
@@ -93,7 +93,7 @@ Aprobar cotizacion:
 ```bash
 curl -X POST http://localhost:3000/api/agent/quote/{quote_id}/approve \
   -H "Content-Type: application/json" \
-  -d "{\"approvedByUserId\":\"22222222-2222-4222-8222-222222222222\"}"
+  -d "{\"approvedByUserId\":\"9cc1fe5e-8b25-4e3d-908e-d9aa0d8f51f2\"}"
 ```
 
 Rechazar cotizacion:
@@ -101,7 +101,7 @@ Rechazar cotizacion:
 ```bash
 curl -X POST http://localhost:3000/api/agent/quote/{quote_id}/reject \
   -H "Content-Type: application/json" \
-  -d "{\"rejectedByUserId\":\"33333333-3333-4333-8333-333333333333\",\"reason\":\"Cliente no confirmo\"}"
+  -d "{\"rejectedByUserId\":\"47ad93a6-44fa-494c-88cc-7a865639e2d0\",\"reason\":\"Cliente no confirmo\"}"
 ```
 
 Ejecutar compra simulada:

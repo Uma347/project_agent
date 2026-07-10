@@ -1,16 +1,23 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 export class CreateQuoteRequestDto {
   @ApiProperty({
-    example: 'quiero comprar dos hamburguesas',
+    example: 'quiero comprar dos mochilas urbanas',
   })
   @IsString()
   @IsNotEmpty()
   prompt!: string;
 
   @ApiProperty({
-    example: '11111111-1111-4111-8111-111111111111',
+    example: 'b6fd7d2d-5e56-4b37-a761-2d69b86a9e91',
   })
   @IsUUID()
   requestedByUserId!: string;

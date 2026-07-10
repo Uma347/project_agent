@@ -3,7 +3,7 @@ import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class RejectQuoteRequestDto {
   @ApiProperty({
-    example: '33333333-3333-4333-8333-333333333333',
+    example: '47ad93a6-44fa-494c-88cc-7a865639e2d0',
   })
   @IsUUID()
   rejectedByUserId!: string;
