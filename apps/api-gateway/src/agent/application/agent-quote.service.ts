@@ -2,7 +2,6 @@ import {
   BadGatewayException,
   GatewayTimeoutException,
   HttpException,
-  HttpStatus,
   Injectable,
 } from '@nestjs/common';
 import { NatsRequestClient } from '../../infrastructure/nats/nats-request.client';
@@ -64,7 +63,7 @@ export class AgentQuoteService {
   ): error is { statusCode: number; message: string } {
     const statusCode =
       typeof error === 'object' && error !== null && 'statusCode' in error
-        ? Number((error as { statusCode: unknown }).statusCode)
+        ? Number(error.statusCode)
         : Number.NaN;
 
     return (
@@ -72,9 +71,9 @@ export class AgentQuoteService {
       error !== null &&
       'message' in error &&
       Number.isInteger(statusCode) &&
-      statusCode >= HttpStatus.BAD_REQUEST &&
-      statusCode < HttpStatus.INTERNAL_SERVER_ERROR &&
-      typeof (error as { message: unknown }).message === 'string'
+      statusCode >= 400 &&
+      statusCode < 500 &&
+      typeof error.message === 'string'
     );
   }
 }

@@ -282,7 +282,11 @@ export class QuotesService {
   async searchCatalogProducts(
     payload: CatalogProductSearchRequestDto,
   ): Promise<CatalogProductSearchResponseDto> {
-    if (!payload || typeof payload.query !== 'string' || !payload.query.trim()) {
+    if (
+      !payload ||
+      typeof payload.query !== 'string' ||
+      !payload.query.trim()
+    ) {
       return {
         error: {
           code: 'INVALID_CATALOG_SEARCH_REQUEST',
@@ -373,7 +377,7 @@ export class QuotesService {
       );
     }
 
-    return response as Record<string, unknown>;
+    return response;
   }
 
   private async loadQuoteProduct(
