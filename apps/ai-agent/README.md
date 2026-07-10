@@ -25,7 +25,7 @@ Salida exitosa:
 
 ```json
 {
-  "productId": "mochila_urbana",
+  "productId": "0e2b0f7f-6f5f-4b35-a0d8-1e42dd90791f",
   "quantity": 2,
   "reason": "Producto identificado desde la intencion del usuario y validado contra el catalogo real."
 }

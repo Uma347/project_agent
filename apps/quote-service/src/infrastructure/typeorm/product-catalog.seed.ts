@@ -6,7 +6,7 @@ import { User } from '../../users/user.entity';
 
 const PRODUCTS: ProductSeed[] = [
   {
-    id: 'mochila_urbana',
+    id: '0e2b0f7f-6f5f-4b35-a0d8-1e42dd90791f',
     sku: 'MOCHILA-URBANA',
     name: 'Mochila urbana',
     description: 'Mochila resistente para uso diario, trabajo o universidad.',
@@ -17,7 +17,7 @@ const PRODUCTS: ProductSeed[] = [
     active: true,
   },
   {
-    id: 'mochila_viaje',
+    id: '24e44649-8b2d-42b5-bcfd-46d4f4e4f7a8',
     sku: 'MOCHILA-VIAJE',
     name: 'Mochila de viaje',
     description: 'Mochila amplia con compartimientos para viajes y escapadas.',
@@ -28,7 +28,7 @@ const PRODUCTS: ProductSeed[] = [
     active: true,
   },
   {
-    id: 'cartera_cuero',
+    id: '8f8e2095-7c5b-4b5b-9ea0-c37f8fd5cc64',
     sku: 'CARTERA-CUERO',
     name: 'Cartera de cuero',
     description: 'Cartera elegante de cuero sintetico para uso cotidiano.',
@@ -39,7 +39,7 @@ const PRODUCTS: ProductSeed[] = [
     active: true,
   },
   {
-    id: 'billetera_compacta',
+    id: 'd6a3868d-f4ac-4bf8-b295-573037f08811',
     sku: 'BILLETERA-COMPACTA',
     name: 'Billetera compacta',
     description: 'Billetera pequena con espacio para tarjetas y efectivo.',
@@ -50,7 +50,7 @@ const PRODUCTS: ProductSeed[] = [
     active: true,
   },
   {
-    id: 'lonchera_termica',
+    id: '62be4a2a-0df9-4422-92f6-0a6d3d8e17d4',
     sku: 'LONCHERA-TERMICA',
     name: 'Lonchera termica',
     description: 'Lonchera termica para conservar alimentos durante el dia.',
@@ -61,7 +61,7 @@ const PRODUCTS: ProductSeed[] = [
     active: true,
   },
   {
-    id: 'cartuchera_escolar',
+    id: '75b5e2ad-3d99-4f3f-a817-c1a6e5a1f1bb',
     sku: 'CARTUCHERA-ESCOLAR',
     name: 'Cartuchera escolar',
     description: 'Cartuchera para utiles escolares y accesorios pequenos.',
@@ -72,7 +72,7 @@ const PRODUCTS: ProductSeed[] = [
     active: true,
   },
   {
-    id: 'morral_crossbody',
+    id: 'a7f88841-c6c6-4e68-8848-0da368b64d7a',
     sku: 'MORRAL-CROSSBODY',
     name: 'Morral crossbody',
     description: 'Morral liviano para llevar objetos personales con comodidad.',
@@ -83,7 +83,7 @@ const PRODUCTS: ProductSeed[] = [
     active: true,
   },
   {
-    id: 'maleta_cabina',
+    id: 'ca56771b-04a7-47d4-9f47-f1577d97682e',
     sku: 'MALETA-CABINA',
     name: 'Maleta de cabina',
     description: 'Maleta compacta para cabina con ruedas y manija extensible.',
