@@ -83,14 +83,14 @@ Productos iniciales:
 
 | ID | SKU | Nombre | Categoria | Tags |
 | --- | --- | --- | --- | --- |
-| `mochila_urbana` | `MOCHILA-URBANA` | Mochila urbana | `backpack` | `urbano`, `estudio`, `trabajo`, `viaje corto` |
-| `mochila_viaje` | `MOCHILA-VIAJE` | Mochila de viaje | `backpack` | `viaje`, `grande`, `organizador` |
-| `cartera_cuero` | `CARTERA-CUERO` | Cartera de cuero | `handbag` | `moda`, `elegante`, `diario` |
-| `billetera_compacta` | `BILLETERA-COMPACTA` | Billetera compacta | `wallet` | `compacto`, `tarjetas`, `accesorio` |
-| `lonchera_termica` | `LONCHERA-TERMICA` | Lonchera termica | `lunchbag` | `colegio`, `oficina`, `alimentos` |
-| `cartuchera_escolar` | `CARTUCHERA-ESCOLAR` | Cartuchera escolar | `pencil_case` | `colegio`, `utiles`, `organizador` |
-| `morral_crossbody` | `MORRAL-CROSSBODY` | Morral crossbody | `crossbody` | `urbano`, `liviano`, `diario` |
-| `maleta_cabina` | `MALETA-CABINA` | Maleta de cabina | `luggage` | `viaje`, `ruedas`, `cabina` |
+| `0e2b0f7f-6f5f-4b35-a0d8-1e42dd90791f` | `MOCHILA-URBANA` | Mochila urbana | `backpack` | `urbano`, `estudio`, `trabajo`, `viaje corto` |
+| `24e44649-8b2d-42b5-bcfd-46d4f4e4f7a8` | `MOCHILA-VIAJE` | Mochila de viaje | `backpack` | `viaje`, `grande`, `organizador` |
+| `8f8e2095-7c5b-4b5b-9ea0-c37f8fd5cc64` | `CARTERA-CUERO` | Cartera de cuero | `handbag` | `moda`, `elegante`, `diario` |
+| `d6a3868d-f4ac-4bf8-b295-573037f08811` | `BILLETERA-COMPACTA` | Billetera compacta | `wallet` | `compacto`, `tarjetas`, `accesorio` |
+| `62be4a2a-0df9-4422-92f6-0a6d3d8e17d4` | `LONCHERA-TERMICA` | Lonchera termica | `lunchbag` | `colegio`, `oficina`, `alimentos` |
+| `75b5e2ad-3d99-4f3f-a817-c1a6e5a1f1bb` | `CARTUCHERA-ESCOLAR` | Cartuchera escolar | `pencil_case` | `colegio`, `utiles`, `organizador` |
+| `a7f88841-c6c6-4e68-8848-0da368b64d7a` | `MORRAL-CROSSBODY` | Morral crossbody | `crossbody` | `urbano`, `liviano`, `diario` |
+| `ca56771b-04a7-47d4-9f47-f1577d97682e` | `MALETA-CABINA` | Maleta de cabina | `luggage` | `viaje`, `ruedas`, `cabina` |
 
 Ejemplo de respuesta de `catalog.products.search`:
 
@@ -98,7 +98,7 @@ Ejemplo de respuesta de `catalog.products.search`:
 {
   "products": [
     {
-      "productId": "mochila_urbana",
+      "productId": "0e2b0f7f-6f5f-4b35-a0d8-1e42dd90791f",
       "sku": "MOCHILA-URBANA",
       "name": "Mochila urbana",
       "description": "Mochila resistente para uso diario, trabajo o universidad.",
