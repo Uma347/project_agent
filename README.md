@@ -9,6 +9,17 @@
 
 Desde la raiz del repositorio:
 
+Linux:
+
+```bash
+sudo docker compose -f infra/docker-compose.yml up --build
+```
+
+
+Windows:
+Asegúrate de que **Docker Desktop** esté iniciado y en ejecución. Luego ejecuta:
+
+
 ```bash
 docker compose -f infra/docker-compose.yml up --build
 ```
@@ -42,6 +53,12 @@ cp .env.example .env
 ```
 
 Levantar solo la infraestructura:
+
+Inicia únicamente los servicios de infraestructura (`postgres` y `nats`) en segundo plano.
+
+> **Linux:** Si es necesario, utiliza `sudo`.
+>
+> **Windows:** Asegúrate de que **Docker Desktop** esté en ejecución.
 
 ```bash
 docker compose -f infra/docker-compose.yml up -d postgres nats
