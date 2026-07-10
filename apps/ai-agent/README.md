@@ -17,7 +17,7 @@ Entrada:
 
 ```json
 {
-  "prompt": "quiero comprar dos hamburguesas"
+  "prompt": "quiero comprar dos mochilas urbanas"
 }
 ```
 
@@ -25,7 +25,7 @@ Salida exitosa:
 
 ```json
 {
-  "productId": "burger_classic",
+  "productId": "mochila_urbana",
   "quantity": 2,
   "reason": "Producto identificado desde la intencion del usuario y validado contra el catalogo real."
 }
@@ -55,7 +55,7 @@ Payload enviado:
 
 ```json
 {
-  "query": "quiero comprar dos hamburguesas",
+  "query": "quiero comprar dos mochilas urbanas",
   "limit": 5
 }
 ```

@@ -9,11 +9,11 @@ productos que usa el agente para interpretar intenciones.
 
 | Subject | Payload minimo | Descripcion |
 | --- | --- | --- |
-| `agent.quote.create` | `{ "prompt": "quiero comprar hamburguesas", "requestedByUserId": "uuid", "quantity": 2 }` | Interpreta la intencion con `ai-agent` y crea una cotizacion en `PENDING_HUMAN_APPROVAL`. `quantity` es opcional y tiene prioridad sobre la cantidad interpretada. |
+| `agent.quote.create` | `{ "prompt": "quiero comprar mochilas urbanas", "requestedByUserId": "uuid", "quantity": 2 }` | Interpreta la intencion con `ai-agent` y crea una cotizacion en `PENDING_HUMAN_APPROVAL`. `quantity` es opcional y tiene prioridad sobre la cantidad interpretada. |
 | `agent.quote.approve` | `{ "quoteId": "uuid", "approvedByUserId": "uuid" }` | Aprueba una cotizacion vigente. |
 | `agent.quote.reject` | `{ "quoteId": "uuid", "rejectedByUserId": "uuid" }` | Rechaza una cotizacion. |
 | `agent.quote.execute` | `{ "quoteId": "uuid" }` | Ejecuta una compra simulada en `payment-simulator` solo si fue aprobada. |
-| `catalog.products.search` | `{ "query": "quiero tres hamburguesas", "limit": 5 }` | Busca productos activos del catalogo por intencion. |
+| `catalog.products.search` | `{ "query": "quiero tres mochilas", "limit": 5 }` | Busca productos activos del catalogo por intencion. |
 
 ## Reglas implementadas
 
@@ -83,9 +83,14 @@ Productos iniciales:
 
 | ID | SKU | Nombre | Categoria | Tags |
 | --- | --- | --- | --- | --- |
-| `burger_classic` | `BURGER-CLASSIC` | Hamburguesa clasica | `food` | `comida`, `clasico`, `carne` |
-| `fries_regular` | `FRIES-REGULAR` | Papas fritas | `food` | `comida`, `acompanamiento` |
-| `soda_regular` | `SODA-REGULAR` | Gaseosa regular | `drink` | `bebida`, `gaseosa` |
+| `mochila_urbana` | `MOCHILA-URBANA` | Mochila urbana | `backpack` | `urbano`, `estudio`, `trabajo`, `viaje corto` |
+| `mochila_viaje` | `MOCHILA-VIAJE` | Mochila de viaje | `backpack` | `viaje`, `grande`, `organizador` |
+| `cartera_cuero` | `CARTERA-CUERO` | Cartera de cuero | `handbag` | `moda`, `elegante`, `diario` |
+| `billetera_compacta` | `BILLETERA-COMPACTA` | Billetera compacta | `wallet` | `compacto`, `tarjetas`, `accesorio` |
+| `lonchera_termica` | `LONCHERA-TERMICA` | Lonchera termica | `lunchbag` | `colegio`, `oficina`, `alimentos` |
+| `cartuchera_escolar` | `CARTUCHERA-ESCOLAR` | Cartuchera escolar | `pencil_case` | `colegio`, `utiles`, `organizador` |
+| `morral_crossbody` | `MORRAL-CROSSBODY` | Morral crossbody | `crossbody` | `urbano`, `liviano`, `diario` |
+| `maleta_cabina` | `MALETA-CABINA` | Maleta de cabina | `luggage` | `viaje`, `ruedas`, `cabina` |
 
 Ejemplo de respuesta de `catalog.products.search`:
 
@@ -93,14 +98,14 @@ Ejemplo de respuesta de `catalog.products.search`:
 {
   "products": [
     {
-      "productId": "burger_classic",
-      "sku": "BURGER-CLASSIC",
-      "name": "Hamburguesa clasica",
-      "description": "Hamburguesa clasica de carne para cotizaciones demo.",
-      "category": "food",
-      "keywords": ["hamburguesa", "hamburguesas", "burger", "burgers"],
-      "tags": ["comida", "clasico", "carne"],
-      "priceCents": 2500
+      "productId": "mochila_urbana",
+      "sku": "MOCHILA-URBANA",
+      "name": "Mochila urbana",
+      "description": "Mochila resistente para uso diario, trabajo o universidad.",
+      "category": "backpack",
+      "keywords": ["mochila", "mochilas", "morral", "bolso escolar", "backpack"],
+      "tags": ["urbano", "estudio", "trabajo", "viaje corto"],
+      "priceCents": 28900
     }
   ]
 }
@@ -110,11 +115,11 @@ Usuarios iniciales:
 
 | Nombre | Email | UUID |
 | --- | --- | --- |
-| Juan Perez | `juan.perez@example.com` | `11111111-1111-4111-8111-111111111111` |
-| Maria Lopez | `maria.lopez@example.com` | `22222222-2222-4222-8222-222222222222` |
-| Carlos Rojas | `carlos.rojas@example.com` | `33333333-3333-4333-8333-333333333333` |
-| Ana Fernandez | `ana.fernandez@example.com` | `44444444-4444-4444-8444-444444444444` |
-| Pedro Gomez | `pedro.gomez@example.com` | `55555555-5555-4555-8555-555555555555` |
+| Juan Perez | `juan.perez@example.com` | `b6fd7d2d-5e56-4b37-a761-2d69b86a9e91` |
+| Maria Lopez | `maria.lopez@example.com` | `9cc1fe5e-8b25-4e3d-908e-d9aa0d8f51f2` |
+| Carlos Rojas | `carlos.rojas@example.com` | `47ad93a6-44fa-494c-88cc-7a865639e2d0` |
+| Ana Fernandez | `ana.fernandez@example.com` | `f2c41e10-a105-4c09-9bc8-e7980799d21e` |
+| Pedro Gomez | `pedro.gomez@example.com` | `6c77170e-87ad-4f49-9848-c618b06030f7` |
 
 ## Variables de entorno
 

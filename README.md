@@ -65,19 +65,24 @@ Productos iniciales:
 
 | ID | SKU | Nombre | Categoria | Keywords |
 | --- | --- | --- | --- | --- |
-| `burger_classic` | `BURGER-CLASSIC` | Hamburguesa clasica | `food` | `hamburguesa`, `hamburguesas`, `burger`, `burgers` |
-| `fries_regular` | `FRIES-REGULAR` | Papas fritas | `food` | `papas`, `papas fritas`, `fritas`, `fries` |
-| `soda_regular` | `SODA-REGULAR` | Gaseosa regular | `drink` | `gaseosa`, `refresco`, `soda`, `bebida` |
+| `mochila_urbana` | `MOCHILA-URBANA` | Mochila urbana | `backpack` | `mochila`, `mochilas`, `morral`, `bolso escolar`, `backpack` |
+| `mochila_viaje` | `MOCHILA-VIAJE` | Mochila de viaje | `backpack` | `mochila de viaje`, `mochila viajera`, `viaje`, `equipaje` |
+| `cartera_cuero` | `CARTERA-CUERO` | Cartera de cuero | `handbag` | `cartera`, `carteras`, `bolso`, `bolsa`, `handbag` |
+| `billetera_compacta` | `BILLETERA-COMPACTA` | Billetera compacta | `wallet` | `billetera`, `billeteras`, `monedero`, `wallet` |
+| `lonchera_termica` | `LONCHERA-TERMICA` | Lonchera termica | `lunchbag` | `lonchera`, `loncheras`, `termica`, `lunch bag` |
+| `cartuchera_escolar` | `CARTUCHERA-ESCOLAR` | Cartuchera escolar | `pencil_case` | `cartuchera`, `cartucheras`, `estuche`, `lapicera` |
+| `morral_crossbody` | `MORRAL-CROSSBODY` | Morral crossbody | `crossbody` | `morral`, `bolso cruzado`, `crossbody`, `canguro` |
+| `maleta_cabina` | `MALETA-CABINA` | Maleta de cabina | `luggage` | `maleta`, `maletas`, `equipaje`, `carry on`, `cabina` |
 
 Usuarios de dominio sembrados:
 
 | Nombre | Email | UUID |
 | --- | --- | --- |
-| Juan Perez | `juan.perez@example.com` | `11111111-1111-4111-8111-111111111111` |
-| Maria Lopez | `maria.lopez@example.com` | `22222222-2222-4222-8222-222222222222` |
-| Carlos Rojas | `carlos.rojas@example.com` | `33333333-3333-4333-8333-333333333333` |
-| Ana Fernandez | `ana.fernandez@example.com` | `44444444-4444-4444-8444-444444444444` |
-| Pedro Gomez | `pedro.gomez@example.com` | `55555555-5555-4555-8555-555555555555` |
+| Juan Perez | `juan.perez@example.com` | `b6fd7d2d-5e56-4b37-a761-2d69b86a9e91` |
+| Maria Lopez | `maria.lopez@example.com` | `9cc1fe5e-8b25-4e3d-908e-d9aa0d8f51f2` |
+| Carlos Rojas | `carlos.rojas@example.com` | `47ad93a6-44fa-494c-88cc-7a865639e2d0` |
+| Ana Fernandez | `ana.fernandez@example.com` | `f2c41e10-a105-4c09-9bc8-e7980799d21e` |
+| Pedro Gomez | `pedro.gomez@example.com` | `6c77170e-87ad-4f49-9848-c618b06030f7` |
 
 No hay autenticacion ni login; estos usuarios solo extienden el modelo de
 dominio.
@@ -103,8 +108,8 @@ POST http://localhost:3000/api/agent/quote
 Content-Type: application/json
 
 {
-  "prompt": "quiero comprar dos hamburguesas",
-  "requestedByUserId": "11111111-1111-4111-8111-111111111111",
+  "prompt": "quiero comprar dos mochilas urbanas",
+  "requestedByUserId": "b6fd7d2d-5e56-4b37-a761-2d69b86a9e91",
   "quantity": 2
 }
 ```
@@ -129,7 +134,7 @@ POST http://localhost:3000/api/agent/quote/{quote_id}/approve
 Content-Type: application/json
 
 {
-  "approvedByUserId": "22222222-2222-4222-8222-222222222222"
+  "approvedByUserId": "9cc1fe5e-8b25-4e3d-908e-d9aa0d8f51f2"
 }
 ```
 
@@ -173,7 +178,7 @@ POST http://localhost:3000/api/agent/quote/{quote_id}/reject
 Content-Type: application/json
 
 {
-  "rejectedByUserId": "33333333-3333-4333-8333-333333333333",
+  "rejectedByUserId": "47ad93a6-44fa-494c-88cc-7a865639e2d0",
   "reason": "Cliente no confirmo la compra"
 }
 ```
