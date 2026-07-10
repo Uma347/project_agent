@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddIntentSearchFieldsToProducts1720000000000
-  implements MigrationInterface
-{
+export class AddIntentSearchFieldsToProducts1720000000000 implements MigrationInterface {
   name = 'AddIntentSearchFieldsToProducts1720000000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
